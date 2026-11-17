@@ -1,0 +1,16 @@
+{
+	"schemaVersion": 1,
+	"id": "fastleap",
+	"version": "${version}",
+	"name": "Fast Leap",
+	"description": "One key: use your Spirit Leap / Infinileap and instantly leap to the class you set for the current M7 stage.",
+	"license": "CC0-1.0",
+	"environment": "client",
+	"entrypoints": { "client": [ "dev.fastleap.FastLeap" ] },
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
