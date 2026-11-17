@@ -10,7 +10,6 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.ContainerInput;
@@ -87,12 +86,7 @@ public final class FastLeap implements ClientModInitializer {
 		if (down && !wasDown) startLeap(mc);
 		wasDown = down;
 
-		if (pending > 0) {
-			if (tryClick(mc)) pending = 0;
-			else if (--pending == 0 && mc.player != null && mc.gui.screen() instanceof AbstractContainerScreen<?> s && isLeapMenu(s)) {
-				mc.player.displayClientMessage(Component.literal("Fast Leap: no " + Config.cfg.get(stage) + " in the menu"), true);
-			}
-		}
+		if (pending > 0 && (tryClick(mc) || --pending == 0)) pending = 0; // shortcut: no feedback when the target is dead/absent, the menu just stays open
 	}
 
 	private static void startLeap(Minecraft mc) {
