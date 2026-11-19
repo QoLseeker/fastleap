@@ -150,7 +150,7 @@ final class FastLeapScreen extends Screen {
 			editing = me != null ? me : Config.CLASSES[0];
 		}
 		Config c = Config.cfg;
-		int bodyH = 12 + STEP + 6 + 12 + 2 * STEP; // the left column is the taller one
+		int bodyH = 12 + 2 * STEP + 6 + 12 + 2 * STEP; // the left column is the taller one
 		int w = PAD + LEFT_W + PAD + RIGHT_W + PAD, h = 20 + PAD + bodyH + PAD / 2 + ROW_H + PAD;
 		int px = width / 2 - w / 2, py = Math.max(4, height / 2 - h / 2);
 		int lx = px + PAD, rx = lx + LEFT_W + PAD, top = py + 20 + PAD;
@@ -163,6 +163,8 @@ final class FastLeapScreen extends Screen {
 		panel.sections.add(new Section(lx, y, "General"));
 		y += 12;
 		addRenderableWidget(new Row(lx, y, LEFT_W, "Enabled", () -> c.enabled, null, null, () -> c.enabled = !c.enabled));
+		y += STEP;
+		addRenderableWidget(new Row(lx, y, LEFT_W, "Crystal auto-leap", () -> c.crystalLeap, null, null, () -> c.crystalLeap = !c.crystalLeap));
 		y += STEP + 6;
 		panel.sections.add(new Section(lx, y, "Timing"));
 		y += 12;

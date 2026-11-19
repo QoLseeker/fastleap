@@ -25,10 +25,11 @@ final class Config {
 	static final int MIN_DELAY_MS = 50, MAX_MS = 3000; // the click is never instant
 	int clickDelayMs = 150; // how long the leap menu must be open before we click
 	int cooldownMs = 500; // min time between two leaps
+	boolean crystalLeap = false; // the auto leap after a Maxor crystal pickup is opt-in
 	Map<String, String> target = new HashMap<>(); // "Class:KEY" (or just "KEY") -> class or Off
 
 	String get(String me, String key) {
-		String fallback = target.getOrDefault(key, CRYSTAL.equals(key) ? OFF : CLASSES[0]); // the auto leap is opt-in
+		String fallback = target.getOrDefault(key, CLASSES[0]);
 		return me == null ? fallback : target.getOrDefault(me + ":" + key, fallback);
 	}
 

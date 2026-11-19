@@ -1,6 +1,7 @@
 package dev.fastleap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import org.junit.jupiter.api.Test;
 
@@ -18,8 +19,8 @@ class ConfigTest {
 	}
 
 	@Test
-	void crystalLeapIsOffUntilYouPickATarget() {
-		assertEquals(Config.OFF, new Config().get("Healer", Config.CRYSTAL));
+	void crystalLeapIsOptIn() {
+		assertFalse(new Config().crystalLeap);
 	}
 
 	@Test
@@ -29,7 +30,5 @@ class ConfigTest {
 		assertEquals(Config.OFF, c.get("Healer", Config.BLOOD_RUSH));
 		c.cycle("Healer", Config.BLOOD_RUSH);
 		assertEquals("Archer", c.get("Healer", Config.BLOOD_RUSH));
-		c.cycle("Healer", Config.CRYSTAL); // from Off
-		assertEquals("Archer", c.get("Healer", Config.CRYSTAL));
 	}
 }

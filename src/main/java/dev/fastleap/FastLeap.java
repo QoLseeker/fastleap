@@ -42,7 +42,7 @@ public final class FastLeap implements ClientModInitializer {
 	private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Storm|Goldor|Necron|Wither King):");
 	private static final Pattern HEAD_NAME = Pattern.compile("(?:\\[.+?] )?(\\w{1,16})");
 	private static final int WAIT_TICKS = 40; // how long we wait for the leap menu to fill
-	private static final long NONE = Long.MIN_VALUE;
+	private static final long NONE = Long.MIN_VALUE, INFINILEAP_COOLDOWN_MS = 2000;
 
 	static Stage stage = Stage.BLOOD_RUSH;
 
@@ -96,7 +96,8 @@ public final class FastLeap implements ClientModInitializer {
 		// Own crystal pickup in Maxor's stage: switch to the leap item now, leap two ticks later so the server knows the new slot.
 		Minecraft mc = Minecraft.getInstance();
 		Matcher m = PICKUP.matcher(s);
-		if (stage != Stage.MAXOR || mc.player == null || !m.find() || !m.group(1).equals(mc.player.getName().getString())) return;
+		if (!Config.cfg.crystalLeap || stage != Stage.MAXOR || mc.player == null || mc.gui.screen() != null // a screen open, leap menu included: don't fight it
+				|| !m.find() || !m.group(1).equals(mc.player.getName().getString())) return;
 		int slot = leapSlot(mc);
 		if (slot < 0 || target(mc, Config.CRYSTAL) == null) return;
 		mc.player.getInventory().setSelectedSlot(slot);
@@ -153,9 +154,15 @@ public final class FastLeap implements ClientModInitializer {
 		return target(mc, key);
 	}
 
+	// Infinileap can't be used again for 2 s, so never start a leap sooner than that with it.
+	private static long cooldown(Minecraft mc) {
+		boolean infinileap = mc.player.getMainHandItem().getHoverName().getString().contains("Infinileap");
+		return infinileap ? Math.max(INFINILEAP_COOLDOWN_MS, Config.cfg.cooldownMs) : Config.cfg.cooldownMs;
+	}
+
 	private static void startLeap(Minecraft mc, String target) {
 		if (target == null || mc.gameMode == null || pending > 0 // pending: ignore click-spam while a leap is in flight
-				|| now() - lastLeap < Config.cfg.cooldownMs) return;
+				|| now() - lastLeap < cooldown(mc)) return;
 		want = target;
 
 		mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); // opens the leap menu
