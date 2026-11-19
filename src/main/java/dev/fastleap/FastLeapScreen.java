@@ -6,12 +6,15 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.function.BooleanSupplier;
+import java.util.function.IntConsumer;
+import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 
 // Dark click-gui look (Odin / NoamAddons style): one panel, accent header, rows with a value or a toggle switch on the right.
@@ -89,6 +92,56 @@ final class FastLeapScreen extends Screen {
 		}
 	}
 
+	// Draggable ms slider; the track is squared (see FastLeap.scale) so short delays are easy to dial in.
+	private static final class Slider extends AbstractWidget {
+		final String label;
+		final int min, max;
+		final IntSupplier get;
+		final IntConsumer set;
+
+		Slider(int x, int y, int w, String label, int min, int max, IntSupplier get, IntConsumer set) {
+			super(x, y, w, ROW_H, Component.empty());
+			this.label = label;
+			this.min = min;
+			this.max = max;
+			this.get = get;
+			this.set = set;
+		}
+
+		private void setFrom(double mouseX) {
+			set.accept(FastLeap.scale((mouseX - getX() - 6) / (width - 12), min, max, 10));
+		}
+
+		@Override
+		public void onClick(MouseButtonEvent e, boolean doubleClick) {
+			setFrom(e.x());
+		}
+
+		@Override
+		public void onDrag(MouseButtonEvent e, double dx, double dy) {
+			setFrom(e.x());
+		}
+
+		@Override
+		protected void extractWidgetRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float delta) {
+			var font = Minecraft.getInstance().font;
+			int x = getX(), y = getY(), ty = y + 2;
+			int bg = isHovered() ? ROW_HOVER : ROW;
+			g.fillGradient(x, y, x + width, y + height, bg, bg);
+			g.text(font, label, x + 6, ty, TEXT, false);
+			String v = get.getAsInt() + " ms";
+			g.text(font, v, x + width - 6 - font.width(v), ty, ACCENT, false);
+			int tx = x + 6, tw = width - 12, ky = y + height - 3;
+			g.fillGradient(tx, ky, tx + tw, ky + 2, 0xFF45454F, 0xFF45454F);
+			int kx = tx + (int) (Math.sqrt((double) (get.getAsInt() - min) / (max - min)) * tw);
+			g.fillGradient(tx, ky, kx, ky + 2, ACCENT, ACCENT);
+			g.fillGradient(kx - 1, ky - 2, kx + 2, ky + 4, 0xFFFFFFFF, 0xFFFFFFFF);
+		}
+
+		@Override
+		protected void updateWidgetNarration(NarrationElementOutput out) {}
+	}
+
 	@Override
 	protected void init() {
 		if (editing == null) {
@@ -115,11 +168,9 @@ final class FastLeapScreen extends Screen {
 		y += STEP + 6;
 		panel.sections.add(new Section(lx, y, "Timing"));
 		y += 12;
-		addRenderableWidget(new Row(lx, y, LEFT_W, "Click delay", null, () -> c.clickDelayTicks + " ticks", null,
-				() -> c.clickDelayTicks = c.clickDelayTicks % 10 + 1));
+		addRenderableWidget(new Slider(lx, y, LEFT_W, "Click delay", Config.MIN_DELAY_MS, Config.MAX_MS, () -> c.clickDelayMs, v -> c.clickDelayMs = v));
 		y += STEP;
-		addRenderableWidget(new Row(lx, y, LEFT_W, "Cooldown", null, () -> c.cooldownTicks + " ticks", null,
-				() -> c.cooldownTicks = (c.cooldownTicks + 5) % 45));
+		addRenderableWidget(new Slider(lx, y, LEFT_W, "Cooldown", 0, Config.MAX_MS, () -> c.cooldownMs, v -> c.cooldownMs = v));
 
 		// right column: per-class targets, "Off" leaves the click alone for that stage
 		y = top;

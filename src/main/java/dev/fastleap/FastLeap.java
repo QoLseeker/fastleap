@@ -46,10 +46,22 @@ public final class FastLeap implements ClientModInitializer {
 	private static Object level;
 	private static int pending;
 	private static boolean wasDown;
-	private static int ticks, lastLeap = -1000, opened = -1;
+	private static int ticks;
+	private static long lastLeap = -100_000, opened = -1; // ms, see now()
 	private static String want; // class to leap to, fixed when the leap starts
 	private static boolean hadCrystal;
 	private static int autoAt = -1;
+
+	private static long now() {
+		return System.nanoTime() / 1_000_000;
+	}
+
+	// Slider position (0..1) -> ms. Squared so the low end, where you tune, gets most of the travel.
+	static int scale(double t, int min, int max, int step) {
+		t = Math.max(0, Math.min(1, t));
+		int v = (int) Math.round((min + (max - min) * t * t) / step) * step;
+		return Math.max(min, Math.min(max, v));
+	}
 
 	static String myClass(Minecraft mc) {
 		return mc.player == null ? null : teammateClasses(mc).get(mc.player.getName().getString());
@@ -60,6 +72,7 @@ public final class FastLeap implements ClientModInitializer {
 		KeyMapping.Category cat = KeyMapping.Category.register(Identifier.parse("fastleap:keys"));
 		menuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.fastleap.menu", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_UNKNOWN, cat));
 
+		ClientTickEvents.START_CLIENT_TICK.register(FastLeap::startTick);
 		ClientTickEvents.END_CLIENT_TICK.register(FastLeap::tick);
 		ClientReceiveMessageEvents.GAME.register((msg, overlay) -> onMessage(msg.getString()));
 		ClientCommandRegistrationCallback.EVENT.register((d, ctx) -> d.register(
@@ -86,6 +99,16 @@ public final class FastLeap implements ClientModInitializer {
 		if (next != null && next.ordinal() > stage.ordinal()) stage = next;
 	}
 
+	// Runs before vanilla reads the mouse this tick, so when a leap starts we can swallow the click: no swing, no attack, no block hit.
+	private static void startTick(Minecraft mc) {
+		boolean down = mc.options.keyAttack.isDown();
+		if (down && !wasDown && startLeap(mc, stage.name())) {
+			while (mc.options.keyAttack.consumeClick()) { /* drain */ }
+			mc.options.keyAttack.setDown(false); // else vanilla's "held" handling starts breaking the block you aim at
+		}
+		wasDown = down;
+	}
+
 	private static void tick(Minecraft mc) {
 		ticks++;
 		if (mc.level != level) { // new world / dungeon run
@@ -96,10 +119,6 @@ public final class FastLeap implements ClientModInitializer {
 		}
 		while (menuKey.consumeClick()) mc.gui.setScreen(new FastLeapScreen());
 
-		// shortcut: the left click still reaches vanilla (can hit a mob you aim at); cancel it with a mixin if that matters
-		boolean down = mc.options.keyAttack.isDown();
-		if (down && !wasDown) startLeap(mc, stage.name());
-		wasDown = down;
 		crystalLeap(mc);
 
 		if (pending > 0 && (tryClick(mc) || --pending == 0)) pending = 0; // shortcut: no feedback when the target is dead/absent, the menu just stays open
@@ -138,18 +157,20 @@ public final class FastLeap implements ClientModInitializer {
 		return name.contains("Spirit Leap") || name.contains("Infinileap");
 	}
 
-	private static void startLeap(Minecraft mc, String key) {
+	// true if a leap was started
+	private static boolean startLeap(Minecraft mc, String key) {
 		if (!Config.cfg.enabled || mc.player == null || mc.gameMode == null || mc.gui.screen() != null || pending > 0
-				|| ticks - lastLeap < Config.cfg.cooldownTicks) return; // pending: ignore click-spam while a leap is in flight
-		if (!isLeapItem(mc.player.getMainHandItem().getHoverName().getString())) return;
+				|| now() - lastLeap < Config.cfg.cooldownMs) return false; // pending: ignore click-spam while a leap is in flight
+		if (!isLeapItem(mc.player.getMainHandItem().getHoverName().getString())) return false;
 		String target = Config.cfg.get(myClass(mc), key);
-		if (target.equals(Config.OFF)) return; // vanilla click goes through untouched
+		if (target.equals(Config.OFF)) return false; // vanilla click goes through untouched
 		want = target;
 
 		mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); // opens the leap menu
-		pending = WAIT_TICKS;
-		lastLeap = ticks;
+		pending = WAIT_TICKS + Config.cfg.clickDelayMs / 50; // the delay only starts once the menu is open
+		lastLeap = now();
 		opened = -1;
+		return true;
 	}
 
 	private static boolean isLeapMenu(AbstractContainerScreen<?> s) {
@@ -161,8 +182,8 @@ public final class FastLeap implements ClientModInitializer {
 		if (mc.player == null || mc.gameMode == null) return false;
 		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> s) || !isLeapMenu(s)) return false;
 
-		if (opened < 0) opened = ticks; // delay counts from when the menu actually shows up, so ping doesn't eat it
-		if (ticks - opened < Config.cfg.clickDelayTicks) return false;
+		if (opened < 0) opened = now(); // delay counts from when the menu actually shows up, so ping doesn't eat it
+		if (now() - opened < Config.cfg.clickDelayMs) return false; // shortcut: checked once per tick, so the real delay rounds up to the next 50 ms
 		Map<String, String> classes = teammateClasses(mc);
 		var slots = s.getMenu().slots;
 		for (int i = 0; i < slots.size() - 36; i++) { // last 36 slots are the player inventory

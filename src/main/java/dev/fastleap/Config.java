@@ -22,8 +22,9 @@ final class Config {
 	static Config cfg = load();
 
 	boolean enabled = true;
-	int clickDelayTicks = 3; // ticks the leap menu must be open before we click
-	int cooldownTicks = 10; // min ticks between two leaps
+	static final int MIN_DELAY_MS = 50, MAX_MS = 3000; // the click is never instant
+	int clickDelayMs = 150; // how long the leap menu must be open before we click
+	int cooldownMs = 500; // min time between two leaps
 	boolean crystalLeap = false; // auto-switch to the leap item and leap after picking up a crystal
 	String crystalItem = "Crystal"; // shortcut: substring of the crystal item's name, unverified; edit fastleap.json if it differs
 	Map<String, String> target = new HashMap<>(); // "Class:STAGE" (or legacy "STAGE") -> class
@@ -44,8 +45,8 @@ final class Config {
 			if (c == null) return new Config();
 			if (c.target == null) c.target = new HashMap<>(); // "target": null in a hand-edited file would NPE every tick
 			if (c.crystalItem == null || c.crystalItem.isBlank()) c.crystalItem = "Crystal";
-			c.clickDelayTicks = Math.max(1, Math.min(10, c.clickDelayTicks));
-			c.cooldownTicks = Math.max(0, Math.min(40, c.cooldownTicks));
+			c.clickDelayMs = Math.max(MIN_DELAY_MS, Math.min(MAX_MS, c.clickDelayMs));
+			c.cooldownMs = Math.max(0, Math.min(MAX_MS, c.cooldownMs));
 			return c;
 		} catch (Exception e) { // missing or corrupt file: start from defaults
 			return new Config();
