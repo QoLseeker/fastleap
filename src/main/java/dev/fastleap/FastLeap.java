@@ -19,16 +19,16 @@ import com.mojang.blaze3d.platform.InputConstants;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// Two jobs, both for M7: left click with a leap item during Blood Rush, and an auto leap after you pick up a Maxor crystal.
 public final class FastLeap implements ClientModInitializer {
 
+	// Blood Rush is everything before the boss. Maxor starts on his first line; Later on any other F7 boss line (not "The Watcher", he speaks in the blood room).
 	public enum Stage {
-		BLOOD_RUSH("Blood Rush"), MAXOR("Maxor"), STORM("Storm"), PRE_GOLDOR("Pre-Goldor"),
-		GOLDOR("Goldor"), NECRON("Necron"), DRAGONS("Dragons");
+		BLOOD_RUSH("Blood Rush"), MAXOR("Maxor"), LATER("Later");
 
 		final String label;
 
@@ -37,8 +37,12 @@ public final class FastLeap implements ClientModInitializer {
 
 	// The name is the word right before "(Class ...)", so ranks ("[MVP+]"), level tags and trailing symbols don't matter.
 	static final Pattern TAB = Pattern.compile("(\\w{1,16})[^\\w(]*\\((Archer|Berserk|Healer|Mage|Tank)\\b");
+	// The pickup line NoammAddons' Maxor crystal feature uses.
+	static final Pattern PICKUP = Pattern.compile("^(\\w+) picked up an Energy Crystal!");
+	private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Storm|Goldor|Necron|Wither King):");
 	private static final Pattern HEAD_NAME = Pattern.compile("(?:\\[.+?] )?(\\w{1,16})");
 	private static final int WAIT_TICKS = 40; // how long we wait for the leap menu to fill
+	private static final long NONE = Long.MIN_VALUE;
 
 	static Stage stage = Stage.BLOOD_RUSH;
 
@@ -46,11 +50,8 @@ public final class FastLeap implements ClientModInitializer {
 	private static Object level;
 	private static int pending;
 	private static boolean wasDown;
-	private static int ticks;
-	private static long lastLeap = -100_000, opened = -1; // ms, see now()
+	private static long lastLeap = NONE / 2, opened = NONE, autoAt = NONE; // ms, see now()
 	private static String want; // class to leap to, fixed when the leap starts
-	private static boolean hadCrystal;
-	private static int autoAt = -1;
 
 	private static long now() {
 		return System.nanoTime() / 1_000_000;
@@ -83,26 +84,31 @@ public final class FastLeap implements ClientModInitializer {
 				})));
 	}
 
-	// shortcut: stage only moves forward on boss chat lines; Dragons starts when the Wither King first speaks
-	// shortcut: Pre-Goldor starts on Storm's death line ("...stood no chance"), wording from memory and unverified; fix it here if the stage never switches
+	// shortcut: stage only moves forward on chat lines, so a reconnect mid-boss starts at Blood Rush until the next boss line
 	static Stage stageFor(String s) {
-		return s.startsWith("[BOSS] Maxor:") ? Stage.MAXOR
-				: s.startsWith("[BOSS] Storm:") ? (s.contains("stood no chance") ? Stage.PRE_GOLDOR : Stage.STORM)
-				: s.startsWith("[BOSS] Goldor:") ? Stage.GOLDOR
-				: s.startsWith("[BOSS] Necron:") ? Stage.NECRON
-				: s.startsWith("[BOSS] Wither King:") ? Stage.DRAGONS
-				: null;
+		return s.startsWith("[BOSS] Maxor:") ? Stage.MAXOR : LATER.matcher(s).find() ? Stage.LATER : null;
 	}
 
 	private static void onMessage(String s) {
 		Stage next = stageFor(s);
 		if (next != null && next.ordinal() > stage.ordinal()) stage = next;
+
+		// Own crystal pickup in Maxor's stage: switch to the leap item now, leap two ticks later so the server knows the new slot.
+		Minecraft mc = Minecraft.getInstance();
+		Matcher m = PICKUP.matcher(s);
+		if (stage != Stage.MAXOR || mc.player == null || !m.find() || !m.group(1).equals(mc.player.getName().getString())) return;
+		int slot = leapSlot(mc);
+		if (slot < 0 || target(mc, Config.CRYSTAL) == null) return;
+		mc.player.getInventory().setSelectedSlot(slot);
+		autoAt = now() + 100;
 	}
 
 	// Runs before vanilla reads the mouse this tick, so when a leap starts we can swallow the click: no swing, no attack, no block hit.
 	private static void startTick(Minecraft mc) {
 		boolean down = mc.options.keyAttack.isDown();
-		if (down && !wasDown && startLeap(mc, stage.name())) {
+		String target = down && !wasDown && stage == Stage.BLOOD_RUSH ? leapTarget(mc, Config.BLOOD_RUSH) : null;
+		if (target != null) { // also swallowed during cooldown / in-flight, else a spam click would swing
+			startLeap(mc, target);
 			while (mc.options.keyAttack.consumeClick()) { /* drain */ }
 			mc.options.keyAttack.setDown(false); // else vanilla's "held" handling starts breaking the block you aim at
 		}
@@ -110,42 +116,19 @@ public final class FastLeap implements ClientModInitializer {
 	}
 
 	private static void tick(Minecraft mc) {
-		ticks++;
 		if (mc.level != level) { // new world / dungeon run
 			level = mc.level;
 			stage = Stage.BLOOD_RUSH;
 			pending = 0;
-			autoAt = -1;
+			autoAt = NONE;
 		}
 		while (menuKey.consumeClick()) mc.gui.setScreen(new FastLeapScreen());
 
-		crystalLeap(mc);
-
+		if (autoAt != NONE && now() >= autoAt) {
+			autoAt = NONE;
+			startLeap(mc, leapTarget(mc, Config.CRYSTAL));
+		}
 		if (pending > 0 && (tryClick(mc) || --pending == 0)) pending = 0; // shortcut: no feedback when the target is dead/absent, the menu just stays open
-	}
-
-	// Picking up a crystal in the Maxor stage switches to the leap item, then leaps one tick later so the server knows the new slot.
-	private static void crystalLeap(Minecraft mc) {
-		if (mc.player == null) return;
-		boolean has = Config.cfg.crystalLeap && stage == Stage.MAXOR && hasCrystal(mc);
-		if (has && !hadCrystal) {
-			int slot = leapSlot(mc);
-			if (slot >= 0) {
-				mc.player.getInventory().setSelectedSlot(slot);
-				autoAt = ticks + 2;
-			}
-		}
-		hadCrystal = has;
-		if (autoAt >= 0 && ticks >= autoAt) {
-			autoAt = -1;
-			startLeap(mc, Config.CRYSTAL);
-		}
-	}
-
-	private static boolean hasCrystal(Minecraft mc) {
-		var inv = mc.player.getInventory();
-		for (int i = 0; i < 36; i++) if (inv.getItem(i).getHoverName().getString().contains(Config.cfg.crystalItem)) return true;
-		return false;
 	}
 
 	private static int leapSlot(Minecraft mc) {
@@ -157,20 +140,28 @@ public final class FastLeap implements ClientModInitializer {
 		return name.contains("Spirit Leap") || name.contains("Infinileap");
 	}
 
-	// true if a leap was started
-	private static boolean startLeap(Minecraft mc, String key) {
-		if (!Config.cfg.enabled || mc.player == null || mc.gameMode == null || mc.gui.screen() != null || pending > 0
-				|| now() - lastLeap < Config.cfg.cooldownMs) return false; // pending: ignore click-spam while a leap is in flight
-		if (!isLeapItem(mc.player.getMainHandItem().getHoverName().getString())) return false;
-		String target = Config.cfg.get(myClass(mc), key);
-		if (target.equals(Config.OFF)) return false; // vanilla click goes through untouched
+	// The class to leap to for this key, or null when the mod is off or the key is set to Off.
+	private static String target(Minecraft mc, String key) {
+		if (!Config.cfg.enabled || mc.player == null) return null;
+		String t = Config.cfg.get(myClass(mc), key);
+		return t.equals(Config.OFF) ? null : t;
+	}
+
+	// Same, but only when a leap item is in hand and no screen is open, i.e. when the click or the auto leap is really ours.
+	private static String leapTarget(Minecraft mc, String key) {
+		if (mc.player == null || mc.gui.screen() != null || !isLeapItem(mc.player.getMainHandItem().getHoverName().getString())) return null;
+		return target(mc, key);
+	}
+
+	private static void startLeap(Minecraft mc, String target) {
+		if (target == null || mc.gameMode == null || pending > 0 // pending: ignore click-spam while a leap is in flight
+				|| now() - lastLeap < Config.cfg.cooldownMs) return;
 		want = target;
 
 		mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); // opens the leap menu
 		pending = WAIT_TICKS + Config.cfg.clickDelayMs / 50; // the delay only starts once the menu is open
 		lastLeap = now();
-		opened = -1;
-		return true;
+		opened = NONE;
 	}
 
 	private static boolean isLeapMenu(AbstractContainerScreen<?> s) {
@@ -182,7 +173,7 @@ public final class FastLeap implements ClientModInitializer {
 		if (mc.player == null || mc.gameMode == null) return false;
 		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> s) || !isLeapMenu(s)) return false;
 
-		if (opened < 0) opened = now(); // delay counts from when the menu actually shows up, so ping doesn't eat it
+		if (opened == NONE) opened = now(); // delay counts from when the menu actually shows up, so ping doesn't eat it
 		if (now() - opened < Config.cfg.clickDelayMs) return false; // shortcut: checked once per tick, so the real delay rounds up to the next 50 ms
 		Map<String, String> classes = teammateClasses(mc);
 		var slots = s.getMenu().slots;

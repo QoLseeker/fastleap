@@ -46,7 +46,8 @@ final class FastLeapScreen extends Screen {
 			g.fillGradient(x, y, x + width, y + height, PANEL, PANEL);
 			g.fillGradient(x, y, x + width, y + 20, ACCENT, ACCENT);
 			g.text(font, "Fast Leap", x + PAD, y + 6, 0xFFFFFFFF, true);
-			String st = "Stage: " + FastLeap.stage.label;
+			String me = FastLeap.myClass(Minecraft.getInstance());
+			String st = "Class: " + (me == null ? "?" : me) + "   Stage: " + FastLeap.stage.label;
 			g.text(font, st, x + width - PAD - font.width(st), y + 6, 0xFFFFFFFF, true);
 			for (Section s : sections) g.text(font, s.title.toUpperCase(), s.x, s.y, DIM, false);
 		}
@@ -149,8 +150,7 @@ final class FastLeapScreen extends Screen {
 			editing = me != null ? me : Config.CLASSES[0];
 		}
 		Config c = Config.cfg;
-		int rightRows = 1 + FastLeap.Stage.values().length + 1; // class selector + stages + crystal
-		int bodyH = 12 + rightRows * STEP;
+		int bodyH = 12 + STEP + 6 + 12 + 2 * STEP; // the left column is the taller one
 		int w = PAD + LEFT_W + PAD + RIGHT_W + PAD, h = 20 + PAD + bodyH + PAD / 2 + ROW_H + PAD;
 		int px = width / 2 - w / 2, py = Math.max(4, height / 2 - h / 2);
 		int lx = px + PAD, rx = lx + LEFT_W + PAD, top = py + 20 + PAD;
@@ -158,13 +158,11 @@ final class FastLeapScreen extends Screen {
 		Panel panel = new Panel(px, py, w, h);
 		addRenderableWidget(panel);
 
-		// left column: general + timing
+		// left column
 		int y = top;
 		panel.sections.add(new Section(lx, y, "General"));
 		y += 12;
 		addRenderableWidget(new Row(lx, y, LEFT_W, "Enabled", () -> c.enabled, null, null, () -> c.enabled = !c.enabled));
-		y += STEP;
-		addRenderableWidget(new Row(lx, y, LEFT_W, "Crystal auto-leap", () -> c.crystalLeap, null, null, () -> c.crystalLeap = !c.crystalLeap));
 		y += STEP + 6;
 		panel.sections.add(new Section(lx, y, "Timing"));
 		y += 12;
@@ -172,19 +170,17 @@ final class FastLeapScreen extends Screen {
 		y += STEP;
 		addRenderableWidget(new Slider(lx, y, LEFT_W, "Cooldown", 0, Config.MAX_MS, () -> c.cooldownMs, v -> c.cooldownMs = v));
 
-		// right column: per-class targets, "Off" leaves the click alone for that stage
+		// right column: who to leap to, per your own class. Off = leave the click / don't auto leap.
 		y = top;
 		panel.sections.add(new Section(rx, y, "Targets"));
 		y += 12;
 		addRenderableWidget(new Row(rx, y, RIGHT_W, "Editing for", null, () -> editing, null,
 				() -> editing = Config.CLASSES[(Arrays.asList(Config.CLASSES).indexOf(editing) + 1) % Config.CLASSES.length]));
-		for (FastLeap.Stage s : FastLeap.Stage.values()) {
-			y += STEP;
-			addRenderableWidget(new Row(rx, y, RIGHT_W, s.label, null, () -> c.get(editing, s.name()), () -> FastLeap.stage == s,
-					() -> c.cycle(editing, s.name())));
-		}
 		y += STEP;
-		addRenderableWidget(new Row(rx, y, RIGHT_W, "Crystal", null, () -> c.get(editing, Config.CRYSTAL), null,
+		addRenderableWidget(new Row(rx, y, RIGHT_W, "Blood Rush click", null, () -> c.get(editing, Config.BLOOD_RUSH), () -> FastLeap.stage == FastLeap.Stage.BLOOD_RUSH,
+				() -> c.cycle(editing, Config.BLOOD_RUSH)));
+		y += STEP;
+		addRenderableWidget(new Row(rx, y, RIGHT_W, "Crystal pickup", null, () -> c.get(editing, Config.CRYSTAL), () -> FastLeap.stage == FastLeap.Stage.MAXOR,
 				() -> c.cycle(editing, Config.CRYSTAL)));
 
 		y = top + bodyH + PAD / 2;
