@@ -98,9 +98,10 @@ public final class FastLeap implements ClientModInitializer {
 		Matcher m = PICKUP.matcher(s);
 		if (!Config.cfg.crystalLeap || stage != Stage.MAXOR || mc.player == null || mc.gui.screen() != null // a screen open, leap menu included: don't fight it
 				|| !m.find() || !m.group(1).equals(mc.player.getName().getString())) return;
-		int slot = leapSlot(mc);
-		if (slot < 0 || target(mc, Config.CRYSTAL) == null) return;
-		mc.player.getInventory().setSelectedSlot(slot);
+		boolean holding = isLeapItem(heldName(mc)); // keep the leap you already hold (Infinileap vs Spirit Leap have different cooldowns)
+		int slot = holding ? -1 : leapSlot(mc);
+		if ((!holding && slot < 0) || target(mc, Config.CRYSTAL) == null) return;
+		if (!holding) mc.player.getInventory().setSelectedSlot(slot);
 		autoAt = now() + 100;
 	}
 
@@ -150,19 +151,22 @@ public final class FastLeap implements ClientModInitializer {
 
 	// Same, but only when a leap item is in hand and no screen is open, i.e. when the click or the auto leap is really ours.
 	private static String leapTarget(Minecraft mc, String key) {
-		if (mc.player == null || mc.gui.screen() != null || !isLeapItem(mc.player.getMainHandItem().getHoverName().getString())) return null;
+		if (mc.player == null || mc.gui.screen() != null || !isLeapItem(heldName(mc))) return null;
 		return target(mc, key);
 	}
 
+	private static String heldName(Minecraft mc) {
+		return mc.player.getMainHandItem().getHoverName().getString();
+	}
+
 	// Infinileap can't be used again for 2 s, so never start a leap sooner than that with it.
-	private static long cooldown(Minecraft mc) {
-		boolean infinileap = mc.player.getMainHandItem().getHoverName().getString().contains("Infinileap");
-		return infinileap ? Math.max(INFINILEAP_COOLDOWN_MS, Config.cfg.cooldownMs) : Config.cfg.cooldownMs;
+	static long cooldownFor(String held, int userMs) {
+		return held.contains("Infinileap") ? Math.max(INFINILEAP_COOLDOWN_MS, userMs) : userMs;
 	}
 
 	private static void startLeap(Minecraft mc, String target) {
 		if (target == null || mc.gameMode == null || pending > 0 // pending: ignore click-spam while a leap is in flight
-				|| now() - lastLeap < cooldown(mc)) return;
+				|| now() - lastLeap < cooldownFor(heldName(mc), Config.cfg.cooldownMs)) return;
 		want = target;
 
 		mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); // opens the leap menu
@@ -176,9 +180,10 @@ public final class FastLeap implements ClientModInitializer {
 		return t.equals("Spirit Leap") || t.equals("Teleport to Player");
 	}
 
+	// true when this leap is over: we clicked, or the menu was open and is gone (you pressed Esc, or the server closed it)
 	private static boolean tryClick(Minecraft mc) {
 		if (mc.player == null || mc.gameMode == null) return false;
-		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> s) || !isLeapMenu(s)) return false;
+		if (!(mc.gui.screen() instanceof AbstractContainerScreen<?> s) || !isLeapMenu(s)) return opened != NONE;
 
 		if (opened == NONE) opened = now(); // delay counts from when the menu actually shows up, so ping doesn't eat it
 		if (now() - opened < Config.cfg.clickDelayMs) return false; // shortcut: checked once per tick, so the real delay rounds up to the next 50 ms

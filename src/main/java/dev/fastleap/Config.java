@@ -48,6 +48,7 @@ final class Config {
 			Config c = GSON.fromJson(Files.readString(file()), Config.class);
 			if (c == null) return new Config();
 			if (c.target == null) c.target = new HashMap<>(); // "target": null in a hand-edited file would NPE every tick
+			c.target.values().removeIf(v -> v == null); // same for {"BLOOD_RUSH": null}
 			c.clickDelayMs = Math.max(MIN_DELAY_MS, Math.min(MAX_MS, c.clickDelayMs));
 			c.cooldownMs = Math.max(0, Math.min(MAX_MS, c.cooldownMs));
 			return c;

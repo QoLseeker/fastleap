@@ -45,4 +45,11 @@ class TabTest {
 		assertEquals(3000, FastLeap.scale(9, 50, 3000, 10));
 		assertEquals(790, FastLeap.scale(0.5, 50, 3000, 10)); // squared: the middle is ~790 ms, not 1525
 	}
+
+	@Test
+	void infinileapWaitsAtLeastTwoSeconds() {
+		assertEquals(2000, FastLeap.cooldownFor("Infinileap", 500));
+		assertEquals(3000, FastLeap.cooldownFor("Infinileap", 3000));
+		assertEquals(500, FastLeap.cooldownFor("Spirit Leap", 500));
+	}
 }
