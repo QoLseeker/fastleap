@@ -3,7 +3,7 @@
 	"id": "fastleap",
 	"version": "${version}",
 	"name": "Fast Leap",
-	"description": "One key: use your Spirit Leap / Infinileap and instantly leap to the class you set for the current M7 stage.",
+	"description": "One key: use your Spirit Leap / INFINITE_SPIRIT_LEAP and instantly leap to the class you set for the current M7 stage.",
 	"license": "CC0-1.0",
 	"environment": "client",
 	"entrypoints": { "client": [ "dev.fastleap.FastLeap" ] },

@@ -43,7 +43,7 @@ public final class FastLeap implements ClientModInitializer {
 	private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Storm|Goldor|Necron|Wither King):");
 	private static final Pattern HEAD_NAME = Pattern.compile("(?:\\[.+?] )?(\\w{1,16})");
 	private static final int WAIT_TICKS = 40; // how long we wait for the leap menu to fill
-	private static final long NONE = Long.MIN_VALUE, INFINILEAP_COOLDOWN_MS = 2000;
+	private static final long NONE = Long.MIN_VALUE, INFINITE_SPIRIT_LEAP_COOLDOWN_MS = 2000;
 
 	static Stage stage = Stage.BLOOD_RUSH;
 
@@ -139,7 +139,7 @@ public final class FastLeap implements ClientModInitializer {
 			debug("crystal leap skipped: " + why);
 			return;
 		}
-		boolean holding = isLeapItem(heldName(mc)); // keep the leap you already hold (Infinileap vs Spirit Leap have different cooldowns)
+		boolean holding = isLeapItem(heldName(mc)); // keep the leap you already hold (INFINITE_SPIRIT_LEAP vs Spirit Leap have different cooldowns)
 		int slot = holding ? -1 : leapSlot(mc);
 		if ((!holding && slot < 0) || target(mc, Config.CRYSTAL) == null) {
 			debug("crystal leap skipped: no leap item in your hotbar, or the Crystal target is Off");
@@ -189,7 +189,7 @@ public final class FastLeap implements ClientModInitializer {
 	}
 
 	private static boolean isLeapItem(String name) {
-		return name.contains("Spirit Leap") || name.contains("Infinileap");
+		return name.contains("Spirit Leap") || name.contains("INFINITE_SPIRIT_LEAP");
 	}
 
 	// The class to leap to for this key, or null when the mod is off or the key is set to Off.
@@ -209,9 +209,9 @@ public final class FastLeap implements ClientModInitializer {
 		return mc.player.getMainHandItem().getHoverName().getString();
 	}
 
-	// Infinileap can't be used again for 2 s, so never start a leap sooner than that with it.
+	// INFINITE_SPIRIT_LEAP can't be used again for 2 s, so never start a leap sooner than that with it.
 	static long cooldownFor(String held, int userMs) {
-		return held.contains("Infinileap") ? Math.max(INFINILEAP_COOLDOWN_MS, userMs) : userMs;
+		return held.contains("INFINITE_SPIRIT_LEAP") ? Math.max(INFINITE_SPIRIT_LEAP_COOLDOWN_MS, userMs) : userMs;
 	}
 
 	private static void startLeap(Minecraft mc, String target) {

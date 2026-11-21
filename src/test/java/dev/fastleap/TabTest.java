@@ -57,9 +57,9 @@ class TabTest {
 	}
 
 	@Test
-	void infinileapWaitsAtLeastTwoSeconds() {
-		assertEquals(2000, FastLeap.cooldownFor("Infinileap", 500));
-		assertEquals(3000, FastLeap.cooldownFor("Infinileap", 3000));
+	void INFINITE_SPIRIT_LEAPWaitsAtLeastTwoSeconds() {
+		assertEquals(2000, FastLeap.cooldownFor("INFINITE_SPIRIT_LEAP", 500));
+		assertEquals(3000, FastLeap.cooldownFor("INFINITE_SPIRIT_LEAP", 3000));
 		assertEquals(500, FastLeap.cooldownFor("Spirit Leap", 500));
 	}
 }
