@@ -51,7 +51,8 @@ public final class FastLeap implements ClientModInitializer {
 	private static Object level;
 	private static int pending;
 	private static boolean wasDown;
-	private static long lastLeap = NONE / 2, opened = NONE, autoAt = NONE; // ms, see now()
+	private static long lastLeap = NONE / 2, opened = NONE, autoAt = NONE, lastCrystal = NONE / 2; // ms, see now()
+	private static boolean hadCrystal;
 	private static String want; // class to leap to, fixed when the leap starts
 
 	private static long now() {
@@ -108,15 +109,31 @@ public final class FastLeap implements ClientModInitializer {
 
 	// Own crystal pickup in Maxor's stage: switch to the leap item now, leap two ticks later so the server knows the new slot.
 	private static void crystalPickup(Minecraft mc, String s) {
+		s = s.replaceAll("\u00a7.", "").replaceAll("\\p{C}", "").replaceAll("[\\p{Z}\\s]+", " "); // colour codes, zero-width and control chars, odd spaces
 		Matcher m = PICKUP.matcher(s);
 		if (!m.find()) {
-			if (s.toLowerCase().contains("crystal")) debug("crystal line, not matched: " + s); // so we can see the real wording
+			if (s.toLowerCase().contains("crystal")) debug("crystal line, not matched: " + s + " codes=" + s.chars().filter(c -> c < 32 || c > 126).boxed().toList()); // so we can see the real wording
 			return;
 		}
+		if (!m.group(1).equalsIgnoreCase("You") && !m.group(1).equalsIgnoreCase(mc.player.getName().getString())) {
+			debug("crystal leap skipped: " + m.group(1) + " picked it up, not you");
+			return;
+		}
+		crystalLeap(mc, "pickup message");
+	}
+
+	// The crystal item showing up in hotbar slot 9 is the same signal Noamm's Place Alert uses; it works even if the chat line is odd.
+	private static void crystalItem(Minecraft mc) {
+		boolean has = mc.player.getInventory().getItem(8).getHoverName().getString().equalsIgnoreCase("energy crystal");
+		if (has && !hadCrystal) crystalLeap(mc, "crystal in hotbar slot 9");
+		hadCrystal = has;
+	}
+
+	private static void crystalLeap(Minecraft mc, String trigger) {
+		if (now() - lastCrystal < 1500) return; // the message and the item both fire for one pickup
 		String why = !Config.cfg.crystalLeap ? "Crystal auto-leap is off"
 				: stage != Stage.MAXOR ? "stage is " + stage.label + ", not Maxor"
 				: mc.gui.screen() != null ? "a screen is open (a leap menu included)"
-				: !m.group(1).equalsIgnoreCase("You") && !m.group(1).equalsIgnoreCase(mc.player.getName().getString()) ? m.group(1) + " picked it up, not you"
 				: null;
 		if (why != null) {
 			debug("crystal leap skipped: " + why);
@@ -130,7 +147,8 @@ public final class FastLeap implements ClientModInitializer {
 		}
 		if (!holding) mc.player.getInventory().setSelectedSlot(slot);
 		autoAt = now() + 100;
-		debug("crystal picked up, " + (holding ? "already holding a leap" : "switched to hotbar slot " + (slot + 1)) + ", leaping in 100 ms");
+		lastCrystal = now();
+		debug(trigger + ", " + (holding ? "already holding a leap" : "switched to hotbar slot " + (slot + 1)) + ", leaping in 100 ms");
 	}
 
 	// Runs before vanilla reads the mouse this tick, so when a leap starts we can swallow the click: no swing, no attack, no block hit.
@@ -151,7 +169,9 @@ public final class FastLeap implements ClientModInitializer {
 			stage = Stage.BLOOD_RUSH;
 			pending = 0;
 			autoAt = NONE;
+			hadCrystal = false;
 		}
+		if (mc.player != null) crystalItem(mc);
 		while (menuKey.consumeClick()) mc.gui.setScreen(new FastLeapScreen());
 
 		if (autoAt != NONE && now() >= autoAt) {
