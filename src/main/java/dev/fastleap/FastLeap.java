@@ -10,6 +10,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.ContainerInput;
@@ -89,20 +90,44 @@ public final class FastLeap implements ClientModInitializer {
 		return s.startsWith("[BOSS] Maxor:") ? Stage.MAXOR : LATER.matcher(s).find() ? Stage.LATER : null;
 	}
 
+	// Local chat line, only with "Debug messages" on: says why a feature did or didn't fire.
+	private static void debug(String msg) {
+		Minecraft mc = Minecraft.getInstance();
+		if (Config.cfg.debug && mc.player != null) mc.gui.hud.chat.addClientSystemMessage(Component.literal("§7[FastLeap] " + msg));
+	}
+
 	private static void onMessage(String s) {
 		Stage next = stageFor(s);
-		if (next != null && next.ordinal() > stage.ordinal()) stage = next;
-
-		// Own crystal pickup in Maxor's stage: switch to the leap item now, leap two ticks later so the server knows the new slot.
+		if (next != null && next.ordinal() > stage.ordinal()) {
+			stage = next;
+			debug("stage is now " + next.label);
+		}
 		Minecraft mc = Minecraft.getInstance();
+		if (mc.player != null) crystalPickup(mc, s);
+	}
+
+	// Own crystal pickup in Maxor's stage: switch to the leap item now, leap two ticks later so the server knows the new slot.
+	private static void crystalPickup(Minecraft mc, String s) {
 		Matcher m = PICKUP.matcher(s);
-		if (!Config.cfg.crystalLeap || stage != Stage.MAXOR || mc.player == null || mc.gui.screen() != null // a screen open, leap menu included: don't fight it
-				|| !m.find() || !m.group(1).equals(mc.player.getName().getString())) return;
+		if (!m.find()) return;
+		String why = !Config.cfg.crystalLeap ? "Crystal auto-leap is off"
+				: stage != Stage.MAXOR ? "stage is " + stage.label + ", not Maxor"
+				: mc.gui.screen() != null ? "a screen is open (a leap menu included)"
+				: !m.group(1).equalsIgnoreCase(mc.player.getName().getString()) ? m.group(1) + " picked it up, not you"
+				: null;
+		if (why != null) {
+			debug("crystal leap skipped: " + why);
+			return;
+		}
 		boolean holding = isLeapItem(heldName(mc)); // keep the leap you already hold (Infinileap vs Spirit Leap have different cooldowns)
 		int slot = holding ? -1 : leapSlot(mc);
-		if ((!holding && slot < 0) || target(mc, Config.CRYSTAL) == null) return;
+		if ((!holding && slot < 0) || target(mc, Config.CRYSTAL) == null) {
+			debug("crystal leap skipped: no leap item in your hotbar, or the Crystal target is Off");
+			return;
+		}
 		if (!holding) mc.player.getInventory().setSelectedSlot(slot);
 		autoAt = now() + 100;
+		debug("crystal picked up, leaping in 100 ms");
 	}
 
 	// Runs before vanilla reads the mouse this tick, so when a leap starts we can swallow the click: no swing, no attack, no block hit.
@@ -128,7 +153,9 @@ public final class FastLeap implements ClientModInitializer {
 
 		if (autoAt != NONE && now() >= autoAt) {
 			autoAt = NONE;
-			startLeap(mc, leapTarget(mc, Config.CRYSTAL));
+			String t = leapTarget(mc, Config.CRYSTAL);
+			if (t == null) debug("auto leap dropped: no leap item in hand, or a screen is open");
+			startLeap(mc, t);
 		}
 		if (pending > 0 && (tryClick(mc) || --pending == 0)) pending = 0; // shortcut: no feedback when the target is dead/absent, the menu just stays open
 	}
@@ -165,9 +192,14 @@ public final class FastLeap implements ClientModInitializer {
 	}
 
 	private static void startLeap(Minecraft mc, String target) {
-		if (target == null || mc.gameMode == null || pending > 0 // pending: ignore click-spam while a leap is in flight
-				|| now() - lastLeap < cooldownFor(heldName(mc), Config.cfg.cooldownMs)) return;
+		if (target == null) return;
+		if (mc.gameMode == null || pending > 0 // pending: ignore click-spam while a leap is in flight
+				|| now() - lastLeap < cooldownFor(heldName(mc), Config.cfg.cooldownMs)) {
+			debug("leap not started: " + (pending > 0 ? "the last one is still in flight" : "cooldown"));
+			return;
+		}
 		want = target;
+		debug("leap started, target " + target);
 
 		mc.gameMode.useItem(mc.player, InteractionHand.MAIN_HAND); // opens the leap menu
 		pending = WAIT_TICKS + Config.cfg.clickDelayMs / 50; // the delay only starts once the menu is open
@@ -195,6 +227,7 @@ public final class FastLeap implements ClientModInitializer {
 			Matcher m = HEAD_NAME.matcher(st.getHoverName().getString().replaceAll("§.", ""));
 			if (m.find() && want.equalsIgnoreCase(classes.get(m.group(1)))) {
 				mc.gameMode.handleContainerInput(s.getMenu().containerId, i, 0, ContainerInput.PICKUP, mc.player); // the server closes the menu itself
+				debug("clicked " + want);
 				return true;
 			}
 		}

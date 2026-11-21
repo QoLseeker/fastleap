@@ -25,6 +25,7 @@ final class Config {
 	static final int MIN_DELAY_MS = 50, MAX_MS = 3000; // the click is never instant
 	int clickDelayMs = 150; // how long the leap menu must be open before we click
 	int cooldownMs = 500; // min time between two leaps
+	boolean debug = false; // chat lines that say why a leap did or didn't fire
 	boolean crystalLeap = false; // the auto leap after a Maxor crystal pickup is opt-in
 	Map<String, String> target = new HashMap<>(); // "Class:KEY" (or just "KEY") -> class or Off
 
