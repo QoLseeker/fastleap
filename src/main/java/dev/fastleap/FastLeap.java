@@ -38,8 +38,8 @@ public final class FastLeap implements ClientModInitializer {
 
 	// The name is the word right before "(Class ...)", so ranks ("[MVP+]"), level tags and trailing symbols don't matter.
 	static final Pattern TAB = Pattern.compile("(\\w{1,16})[^\\w(]*\\((Archer|Berserk|Healer|Mage|Tank)\\b");
-	// The pickup line NoammAddons' Maxor crystal feature uses.
-	static final Pattern PICKUP = Pattern.compile("^(\\w+) picked up an Energy Crystal!");
+	// The pickup line NoammAddons' Maxor crystal feature uses, plus an optional rank tag and "You" for your own pickup.
+	static final Pattern PICKUP = Pattern.compile("^(?:\\[[^\\]]+] )?(\\w+) picked up an Energy Crystal!");
 	private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Storm|Goldor|Necron|Wither King):");
 	private static final Pattern HEAD_NAME = Pattern.compile("(?:\\[.+?] )?(\\w{1,16})");
 	private static final int WAIT_TICKS = 40; // how long we wait for the leap menu to fill
@@ -109,11 +109,14 @@ public final class FastLeap implements ClientModInitializer {
 	// Own crystal pickup in Maxor's stage: switch to the leap item now, leap two ticks later so the server knows the new slot.
 	private static void crystalPickup(Minecraft mc, String s) {
 		Matcher m = PICKUP.matcher(s);
-		if (!m.find()) return;
+		if (!m.find()) {
+			if (s.toLowerCase().contains("crystal")) debug("crystal line, not matched: " + s); // so we can see the real wording
+			return;
+		}
 		String why = !Config.cfg.crystalLeap ? "Crystal auto-leap is off"
 				: stage != Stage.MAXOR ? "stage is " + stage.label + ", not Maxor"
 				: mc.gui.screen() != null ? "a screen is open (a leap menu included)"
-				: !m.group(1).equalsIgnoreCase(mc.player.getName().getString()) ? m.group(1) + " picked it up, not you"
+				: !m.group(1).equalsIgnoreCase("You") && !m.group(1).equalsIgnoreCase(mc.player.getName().getString()) ? m.group(1) + " picked it up, not you"
 				: null;
 		if (why != null) {
 			debug("crystal leap skipped: " + why);
@@ -127,7 +130,7 @@ public final class FastLeap implements ClientModInitializer {
 		}
 		if (!holding) mc.player.getInventory().setSelectedSlot(slot);
 		autoAt = now() + 100;
-		debug("crystal picked up, leaping in 100 ms");
+		debug("crystal picked up, " + (holding ? "already holding a leap" : "switched to hotbar slot " + (slot + 1)) + ", leaping in 100 ms");
 	}
 
 	// Runs before vanilla reads the mouse this tick, so when a leap starts we can swallow the click: no swing, no attack, no block hit.
@@ -154,7 +157,7 @@ public final class FastLeap implements ClientModInitializer {
 		if (autoAt != NONE && now() >= autoAt) {
 			autoAt = NONE;
 			String t = leapTarget(mc, Config.CRYSTAL);
-			if (t == null) debug("auto leap dropped: no leap item in hand, or a screen is open");
+			if (t == null) debug("auto leap dropped: holding \"" + heldName(mc) + "\", screen " + (mc.gui.screen() == null ? "none" : mc.gui.screen().getClass().getSimpleName()));
 			startLeap(mc, t);
 		}
 		if (pending > 0 && (tryClick(mc) || --pending == 0)) pending = 0; // shortcut: no feedback when the target is dead/absent, the menu just stays open

@@ -31,9 +31,18 @@ class TabTest {
 
 	@Test
 	void pickupLineNamesThePlayer() {
-		Matcher m = FastLeap.PICKUP.matcher("Steve picked up an Energy Crystal!");
+		Matcher m = FastLeap.PICKUP.matcher("useQoL picked up an Energy Crystal!"); // a real line from a run
+		assertTrue(m.find());
+		assertEquals("useQoL", m.group(1));
+		m = FastLeap.PICKUP.matcher("Steve picked up an Energy Crystal!");
 		assertTrue(m.find());
 		assertEquals("Steve", m.group(1));
+		m = FastLeap.PICKUP.matcher("[MVP+] Steve picked up an Energy Crystal!");
+		assertTrue(m.find());
+		assertEquals("Steve", m.group(1));
+		m = FastLeap.PICKUP.matcher("You picked up an Energy Crystal!");
+		assertTrue(m.find());
+		assertEquals("You", m.group(1));
 		assertFalse(FastLeap.PICKUP.matcher("Steve placed an Energy Crystal!").find());
 	}
 
