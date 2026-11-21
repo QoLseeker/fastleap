@@ -93,7 +93,7 @@ public final class FastLeap implements ClientModInitializer {
 	// Local chat line, only with "Debug messages" on: says why a feature did or didn't fire.
 	private static void debug(String msg) {
 		Minecraft mc = Minecraft.getInstance();
-		if (Config.cfg.debug && mc.player != null) mc.gui.hud.chat.addClientSystemMessage(Component.literal("§7[FastLeap] " + msg));
+		if (Config.cfg.debug && mc.player != null) mc.gui.hud.getChat().addClientSystemMessage(Component.literal("§7[FastLeap] " + msg));
 	}
 
 	private static void onMessage(String s) {
