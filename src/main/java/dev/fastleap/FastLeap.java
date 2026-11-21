@@ -19,7 +19,7 @@ import net.minecraft.world.item.Items;
 import com.mojang.blaze3d.platform.InputConstants;
 import org.lwjgl.glfw.GLFW;
 
-import java.util.HashMap;
+import java.util.Locale;\nimport java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -189,7 +189,11 @@ public final class FastLeap implements ClientModInitializer {
 	}
 
 	private static boolean isLeapItem(String name) {
-		return name.contains("Spirit Leap") || name.contains("INFINITE_SPIRIT_LEAP");
+		if (name == null) return false;
+		String normalized = name.replaceAll("§.", "").toLowerCase(Locale.ROOT);
+		return normalized.contains("spirit leap")
+				|| normalized.contains("infinileap")
+				|| normalized.contains("infinite_spirit_leap");
 	}
 
 	// The class to leap to for this key, or null when the mod is off or the key is set to Off.
