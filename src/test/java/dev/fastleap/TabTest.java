@@ -40,6 +40,7 @@ class TabTest {
 		m = FastLeap.PICKUP.matcher("[MVP+] Steve picked up an Energy Crystal!");
 		assertTrue(m.find());
 		assertEquals("Steve", m.group(1));
+		assertTrue(FastLeap.PICKUP.matcher("\u00a7r useQoL picked up an Energy Crystal!").find()); // stray prefix
 		m = FastLeap.PICKUP.matcher("You picked up an Energy Crystal!");
 		assertTrue(m.find());
 		assertEquals("You", m.group(1));

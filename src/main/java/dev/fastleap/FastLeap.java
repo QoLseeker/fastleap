@@ -39,7 +39,7 @@ public final class FastLeap implements ClientModInitializer {
 	// The name is the word right before "(Class ...)", so ranks ("[MVP+]"), level tags and trailing symbols don't matter.
 	static final Pattern TAB = Pattern.compile("(\\w{1,16})[^\\w(]*\\((Archer|Berserk|Healer|Mage|Tank)\\b");
 	// The pickup line NoammAddons' Maxor crystal feature uses, plus an optional rank tag and "You" for your own pickup.
-	static final Pattern PICKUP = Pattern.compile("^(?:\\[[^\\]]+] )?(\\w+) picked up an Energy Crystal!");
+	static final Pattern PICKUP = Pattern.compile("(\\w+) picked up an Energy Crystal");
 	private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Storm|Goldor|Necron|Wither King):");
 	private static final Pattern HEAD_NAME = Pattern.compile("(?:\\[.+?] )?(\\w{1,16})");
 	private static final int WAIT_TICKS = 40; // how long we wait for the leap menu to fill
