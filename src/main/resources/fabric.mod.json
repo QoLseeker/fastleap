@@ -1,12 +1,12 @@
 {
 	"schemaVersion": 1,
-	"id": "fastleap",
+	"id": "sbkit",
 	"version": "${version}",
-	"name": "Fast Leap",
-	"description": "One key: use your Spirit Leap / INFINITE_SPIRIT_LEAP and instantly leap to the class you set for the current M7 stage.",
+	"name": "SB Kit",
+	"description": "Small modular client mod. Each feature is one class (see dev.sbkit.Features). Includes Fast Leap and Rag Pet Swap.",
 	"license": "CC0-1.0",
 	"environment": "client",
-	"entrypoints": { "client": [ "dev.fastleap.FastLeap" ] },
+	"entrypoints": { "client": [ "dev.sbkit.SbKit" ] },
 	"depends": {
 		"fabricloader": ">=0.19.3",
 		"minecraft": "~26.2",

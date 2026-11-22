@@ -1,8 +1,14 @@
-# fastleap
-Two M7 leap helpers. Settings: `/fastleap` (or bind a key). Targets are set per your own class; **Off** turns one off.
+# SB Kit
 
-- **Blood Rush click:** before the boss starts, hold a Spirit Leap / INFINITE_SPIRIT_LEAP and left click. It opens the menu and picks the class you set. Once Maxor speaks, left click is vanilla again.
-- **Crystal auto-leap:** off by default, toggle it in the settings. In Maxor's stage, when the chat says *you* picked up an Energy Crystal, it switches to your leap item and leaps to the class you set. It does nothing while any screen is open, so a leap menu you opened yourself is left alone.
-- Click delay and cooldown are in milliseconds. The delay counts from when the leap menu opens, not from your click. With an INFINITE_SPIRIT_LEAP the cooldown is at least 2 s.
-- The stage comes from boss chat lines only. If you reconnect mid-boss it starts at Blood Rush until the next boss line.
-- Both features act for you, so they carry risk on Hypixel.
+Small client mod where every feature is one class.
+
+## Add a feature
+1. Create `src/main/java/dev/sbkit/features/MyFeature.java` extending `Feature`.
+2. Declare settings with `add(new Setting.Bool/Int/Text/Choice(...))` — they get saved to `config/sbkit.json` and appear in the settings screen automatically.
+3. Override only the hooks you need: `init`, `onStartTick`, `onTick`, `onMessage`, `onWorldChange`.
+4. Add `new MyFeature()` to `Features.ALL`. Nothing else changes.
+
+Open settings: `/sbkit`, `/<featureId>` (`/fastleap`, `/ragswap`), or the "Open SB Kit settings" keybind.
+
+## Build
+Needs JDK 25 and Gradle 9.5+: `gradle build` -> `build/libs/sbkit-1.0.0.jar`. Remove the old `fastleap-1.0.0.jar` from your mods folder.
