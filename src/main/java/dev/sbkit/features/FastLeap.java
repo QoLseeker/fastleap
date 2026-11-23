@@ -42,7 +42,7 @@ public final class FastLeap extends Feature {
     private final Setting.Bool crystalLeap = add(new Setting.Bool("crystalLeap", "Crystal auto-leap", false));
     private final Setting.Int clickDelayMs = add(new Setting.Int("clickDelayMs", "Click delay (ms)", 150, 50, 3000, 50));
     private final Setting.Int cooldownMs = add(new Setting.Int("cooldownMs", "Cooldown (ms)", 500, 0, 3000, 50));
-    private final Setting.Choice editing = add(new Setting.Choice("editing", "Editing targets for", CLASSES.get(0), CLASSES));
+    private final Setting.Choice editing = add(new Setting.Choice("editing", "Editing for", CLASSES.get(0), CLASSES));
     /** "<class>.<stage key>" -> class to leap to, or Off. */
     private final Map<String, Setting.Choice> targets = new HashMap<>();
 
@@ -56,11 +56,19 @@ public final class FastLeap extends Feature {
         super("fastleap", "Fast Leap", true);
         for (String cls : CLASSES) {
             for (String[] st : new String[][] {{BLOOD_RUSH, "Blood Rush click"}, {CRYSTAL, "Crystal pickup"}}) {
-                Setting.Choice c = add(new Setting.Choice(cls + "." + st[0], cls + ": " + st[1], CLASSES.get(0), OPTIONS));
+                Setting.Choice c = add(new Setting.Choice(cls + "." + st[0], st[1], CLASSES.get(0), OPTIONS));
+                Stage live = st[0].equals(BLOOD_RUSH) ? Stage.BLOOD_RUSH : Stage.MAXOR;
                 c.visible = () -> editing.get().equals(cls);
+                c.highlight = () -> stage == live; // accent bar on the row for the current stage
                 targets.put(cls + "." + st[0], c);
             }
         }
+    }
+
+    @Override
+    public String status() {
+        String cls = myClass(Minecraft.getInstance());
+        return (cls == null ? "?" : cls) + " · " + stage.label;
     }
 
     @Override

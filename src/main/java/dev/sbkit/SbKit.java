@@ -46,7 +46,7 @@ public final class SbKit implements ClientModInitializer {
 
     private static int open(Feature f) {
         Minecraft mc = Minecraft.getInstance();
-        mc.execute(() -> mc.gui.setScreen(new SettingsScreen(f, 0)));
+        mc.execute(() -> mc.gui.setScreen(new SettingsScreen(f)));
         return 1;
     }
 
@@ -55,7 +55,7 @@ public final class SbKit implements ClientModInitializer {
             lastLevel = mc.level;
             each(f -> f.onWorldChange(mc));
         }
-        while (menuKey.consumeClick()) mc.gui.setScreen(new SettingsScreen(null, 0));
+        while (menuKey.consumeClick()) mc.gui.setScreen(new SettingsScreen(null));
         each(f -> f.onTick(mc));
     }
 

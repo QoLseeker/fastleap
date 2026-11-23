@@ -11,6 +11,10 @@ public final class SettingCheck {
         i.set(-5); assert i.get() == 50;
         i.fromJson(new JsonPrimitive(700)); assert i.get() == 700;
 
+        assert i.fromFraction(0) == 50 && i.fromFraction(1) == 3000;
+        assert i.fromFraction(-1) == 50 && i.fromFraction(2) == 3000; // out of range is clamped
+        assert i.fromFraction(0.5) == 800;                            // 50 + 2950 * 0.25 = 787.5, snapped to step 50
+
         var c = new Setting.Choice("c", "C", "Archer", List.of("Archer", "Mage", "Off"));
         c.cycle(); assert c.get().equals("Mage");
         c.cycle(); c.cycle(); assert c.get().equals("Archer");

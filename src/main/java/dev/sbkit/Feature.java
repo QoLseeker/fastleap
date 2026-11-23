@@ -26,6 +26,12 @@ public abstract class Feature {
     public final boolean on() { return enabled.get(); }
     protected final void debug(String msg) { if (debug.get()) Util.chat("§7[" + name + "] " + msg); }
 
+    /** Failures the player must see: not gated by the debug switch. */
+    protected final void warn(String msg) { Util.chat("§c[" + name + "] " + msg); }
+
+    /** Short text shown at the right of the settings header. */
+    public String status() { return ""; }
+
     public void init() {}
     /** Start of the client tick, before the game consumes key clicks. */
     public void onStartTick(Minecraft mc) {}
