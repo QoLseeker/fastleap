@@ -2,9 +2,13 @@ package dev.sbkit.features;
 
 import dev.sbkit.Feature;
 import dev.sbkit.Setting;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
 import java.util.Locale;
@@ -31,7 +35,6 @@ public final class RagPetSwap extends Feature {
     private final Setting.Text heldItem = add(new Setting.Text("heldItem", "Held item", "Antique Remedies"));
 
     private Phase phase = Phase.IDLE;
-    private boolean wasDown;
     private long swapAt, giveUpAt, waitUntil, lastCast = Long.MIN_VALUE / 2;
     private int seenContainer = -1;
 
@@ -47,13 +50,21 @@ public final class RagPetSwap extends Feature {
         finish(mc);
     }
 
+    /** Fires when the client uses the held item (right-click), i.e. when the use-item packet is sent. */
     @Override
-    public void onStartTick(Minecraft mc) {
-        boolean down = mc.options.keyUse.isDown();
-        boolean pressed = down && !wasDown;
-        wasDown = down;
-        if (!pressed || !on() || phase != Phase.IDLE || mc.player == null || mc.gui.screen() != null) return;
-        if (!lower(heldName(mc)).contains("ragnarock axe")) return;
+    public void init() {
+        UseItemCallback.EVENT.register((player, level, hand) -> {
+            if (level.isClientSide() && hand == InteractionHand.MAIN_HAND) onUse(Minecraft.getInstance(), player.getItemInHand(hand));
+            return InteractionResult.PASS;
+        });
+    }
+
+    private void onUse(Minecraft mc, ItemStack stack) {
+        if (!on() || mc.player == null) return;
+        String id = skyblockId(stack);
+        debug("used " + name(stack) + " [" + id + "]"); // shows what the mod sees if the rag is not recognised
+        if (!id.equals("RAGNAROCK_AXE") && !lower(name(stack)).contains("ragnarock")) return;
+        if (phase != Phase.IDLE) return;
         if (now() - lastCast < cycleS.get() * 1000L) { debug("ignored: rag still on cooldown"); return; }
 
         lastCast = now();

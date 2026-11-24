@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.component.ItemLore;
 
 import java.util.Locale;
@@ -21,6 +22,11 @@ public final class Util {
     public static String name(ItemStack s) { return s.getHoverName().getString(); }
 
     public static String heldName(Minecraft mc) { return name(mc.player.getMainHandItem()); }
+
+    /** SkyBlock item id (e.g. RAGNAROCK_AXE) from the item's custom data, or "". Survives reforges and renames. */
+    public static String skyblockId(ItemStack s) {
+        return s.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag().getString("id").orElse("");
+    }
 
     /** All lore lines joined with newlines, formatting stripped. */
     public static String lore(ItemStack s) {
