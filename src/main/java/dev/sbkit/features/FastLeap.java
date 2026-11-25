@@ -10,8 +10,10 @@ import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Items;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,19 +25,25 @@ import static dev.sbkit.Util.*;
  */
 public final class FastLeap extends Feature {
     private enum Stage {
-        BLOOD_RUSH("Blood Rush"), MAXOR("Maxor"), STORM("Storm"), LATER("after Storm");
+        BLOOD_RUSH("Blood Rush"), MAXOR("Maxor"), STORM("Storm"), GOLDOR("Goldor"), NECRON("Necron"), KING("Wither King");
         final String label;
         Stage(String label) { this.label = label; }
     }
 
     private static final List<String> CLASSES = Dungeon.CLASSES;
     private static final List<String> OPTIONS = List.of("Archer", "Berserk", "Healer", "Mage", "Tank", "Off");
-    private static final String BLOOD_RUSH = "BLOOD_RUSH", CRYSTAL = "CRYSTAL", AFTER_STORM = "AFTER_STORM";
+    private static final String BLOOD_RUSH = "BLOOD_RUSH", CRYSTAL = "CRYSTAL", NECRON = "NECRON";
     private static final long NONE = Long.MIN_VALUE;
     private static final int WAIT_TICKS = 40;
 
     private static final Pattern PICKUP = Pattern.compile("(\\w+) picked up an Energy Crystal");
-    private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Goldor|Necron|Wither King):");
+    private static final Pattern BOSS_LINE = Pattern.compile("^\\[BOSS] (Maxor|Storm|Goldor|Necron|Wither King):");
+    private static final Map<String, Stage> BOSS_STAGES = Map.of("Maxor", Stage.MAXOR, "Storm", Stage.STORM, "Goldor", Stage.GOLDOR, "Necron", Stage.NECRON, "Wither King", Stage.KING);
+    private static final List<String> ORDER_STAGES = List.of("Storm", "Goldor");
+    /** Default left-click leap order per class after Maxor: one step per click, "A/B" = first of those who is in the party. */
+    private static final Map<String, String> DEFAULT_ORDER = Map.of(
+        "Berserk", "Mage, Healer/Tank, Mage",
+        "Archer", "Mage, Healer, Mage/Tank, Healer/Tank/Archer, Mage");
     private static final Pattern HEAD_NAME = Pattern.compile("(?:\\[.+?] )?(\\w{1,16})");
 
     private final Setting.Bool crystalLeap = add(new Setting.Bool("crystalLeap", "Crystal auto-leap", false));
@@ -44,9 +52,11 @@ public final class FastLeap extends Feature {
     private final Setting.Choice editing = add(new Setting.Choice("editing", "Editing for", CLASSES.get(0), CLASSES));
     /** "<class>.<stage key>" -> class to leap to, or Off. */
     private final Map<String, Setting.Choice> targets = new HashMap<>();
+    private final Map<String, Setting.Choice> orderStage = new HashMap<>();
+    private final Map<String, Setting.Text> orderSteps = new HashMap<>();
 
     private Stage stage = Stage.BLOOD_RUSH;
-    private int pending;
+    private int pending, seq, commit = -1; // seq = next step of the leap order
     private boolean wasDown, hadCrystal;
     private long lastLeap = Long.MIN_VALUE / 2, opened = NONE, autoAt = NONE, lastCrystal = Long.MIN_VALUE / 2;
     private String want;
@@ -54,15 +64,25 @@ public final class FastLeap extends Feature {
     public FastLeap() {
         super("fastleap", "Fast Leap", true);
         for (String cls : CLASSES) {
-            for (String[] st : new String[][] {{BLOOD_RUSH, "Blood Rush click"}, {CRYSTAL, "Crystal pickup"}, {AFTER_STORM, "After Storm click"}}) {
-                // After Storm starts Off so the left click keeps swinging until you pick a class.
-                Setting.Choice c = add(new Setting.Choice(cls + "." + st[0], st[1], st[0].equals(AFTER_STORM) ? "Off" : CLASSES.get(0), OPTIONS));
-                Stage live = st[0].equals(BLOOD_RUSH) ? Stage.BLOOD_RUSH : st[0].equals(CRYSTAL) ? Stage.MAXOR : Stage.LATER;
-                c.visible = () -> editing.get().equals(cls);
-                c.highlight = () -> stage == live; // accent bar on the row for the current stage
-                targets.put(cls + "." + st[0], c);
-            }
+            row(cls, BLOOD_RUSH, "Blood Rush click", CLASSES.get(0), Stage.BLOOD_RUSH);
+            row(cls, CRYSTAL, "Crystal pickup", CLASSES.get(0), Stage.MAXOR);
+            var from = add(new Setting.Choice(cls + ".ORDER_STAGE", "Leap order runs in", cls.equals("Berserk") ? "Goldor" : "Storm", ORDER_STAGES));
+            var order = add(new Setting.Text(cls + ".ORDER", "Leap order, one step per click", DEFAULT_ORDER.getOrDefault(cls, "")));
+            from.visible = () -> editing.get().equals(cls);
+            order.visible = () -> editing.get().equals(cls);
+            order.highlight = () -> stage.label.equals(from.get());
+            orderStage.put(cls, from);
+            orderSteps.put(cls, order);
+            // Necron: every click goes to one class (Healer for Archer and Berserk).
+            row(cls, NECRON, "Necron click", cls.equals("Archer") || cls.equals("Berserk") ? "Healer" : "Off", Stage.NECRON);
         }
+    }
+
+    private void row(String cls, String key, String label, String def, Stage live) {
+        Setting.Choice c = add(new Setting.Choice(cls + "." + key, label, def, OPTIONS));
+        c.visible = () -> editing.get().equals(cls);
+        c.highlight = () -> stage == live; // accent bar on the row for the current stage
+        targets.put(cls + "." + key, c);
     }
 
     @Override
@@ -74,6 +94,7 @@ public final class FastLeap extends Feature {
     @Override
     public void onWorldChange(Minecraft mc) {
         stage = Stage.BLOOD_RUSH;
+        seq = 0;
         pending = 0;
         autoAt = NONE;
         hadCrystal = false;
@@ -81,9 +102,11 @@ public final class FastLeap extends Feature {
 
     @Override
     public void onMessage(Minecraft mc, String text) {
-        Stage s = text.startsWith("[BOSS] Maxor:") ? Stage.MAXOR : text.startsWith("[BOSS] Storm:") ? Stage.STORM : LATER.matcher(text).find() ? Stage.LATER : null;
+        Matcher bm = BOSS_LINE.matcher(text);
+        Stage s = bm.find() ? BOSS_STAGES.get(bm.group(1)) : null;
         if (s != null && s.ordinal() > stage.ordinal()) {
             stage = s;
+            seq = 0; // each phase starts its leap order from the top
             debug("stage is now " + s.label);
         }
         if (mc.player != null) crystalPickup(mc, text);
@@ -92,10 +115,13 @@ public final class FastLeap extends Feature {
     @Override
     public void onStartTick(Minecraft mc) {
         boolean down = mc.options.keyAttack.isDown();
-        String key = stage == Stage.BLOOD_RUSH ? BLOOD_RUSH : stage == Stage.LATER ? AFTER_STORM : null;
-        String t = down && !wasDown && key != null ? leapTarget(mc, key) : null;
+        commit = -1;
+        String t = !down || wasDown ? null
+            : stage == Stage.BLOOD_RUSH ? leapTarget(mc, BLOOD_RUSH)
+            : stage == Stage.NECRON ? leapTarget(mc, NECRON)
+            : orderTarget(mc);
         if (t != null) {
-            startLeap(mc, t);
+            if (startLeap(mc, t) && commit >= 0) seq = commit; // only a leap that really started uses up a step
             while (mc.options.keyAttack.consumeClick()) { } // swallow the click so the leap item isn't also swung
             mc.options.keyAttack.setDown(false);
         }
@@ -163,11 +189,11 @@ public final class FastLeap extends Feature {
 
     // ---- leap ---------------------------------------------------------------------------------------------
 
-    private void startLeap(Minecraft mc, String target) {
-        if (target == null) return;
+    private boolean startLeap(Minecraft mc, String target) {
+        if (target == null) return false;
         if (mc.gameMode == null || pending > 0 || now() - lastLeap < cooldownFor(heldName(mc))) {
             debug("leap not started: " + (pending > 0 ? "the last one is still in flight" : "cooldown"));
-            return;
+            return false;
         }
         want = target;
         debug("leap started, target " + target);
@@ -175,6 +201,7 @@ public final class FastLeap extends Feature {
         pending = WAIT_TICKS + clickDelayMs.get() / 50;
         lastLeap = now();
         opened = NONE;
+        return true;
     }
 
     /** True when done (clicked, or the menu opened and is gone again); false to keep waiting. */
@@ -228,6 +255,21 @@ public final class FastLeap extends Feature {
         String cls = myClass(mc);
         String t = cls == null ? CLASSES.get(0) : targets.get(cls + "." + stageKey).get();
         return t.equals("Off") ? null : t;
+    }
+
+    /** The next target of your leap order while the current phase is the one you set; null otherwise. */
+    private String orderTarget(Minecraft mc) {
+        String cls = myClass(mc);
+        if (!on() || cls == null || mc.gui.screen() != null || !isLeapItem(heldName(mc))) return null;
+        if (!stage.label.equals(orderStage.get(cls).get())) return null;
+
+        String me = mc.player.getName().getString();
+        Set<String> present = new HashSet<>();
+        teammateClasses(mc).forEach((name, c) -> { if (!name.equals(me)) present.add(c); });
+        Dungeon.Pick pick = Dungeon.pick(orderSteps.get(cls).get(), seq, present);
+        if (pick == null) { debug("leap order finished, or nobody left to leap to"); return null; }
+        commit = pick.step() + 1;
+        return pick.cls();
     }
 
     /** Like {@link #target} but also requires: no screen open and a leap in hand. */

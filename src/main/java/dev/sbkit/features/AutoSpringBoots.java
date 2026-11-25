@@ -5,36 +5,52 @@ import dev.sbkit.Feature;
 import dev.sbkit.Setting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayDeque;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Queue;
 
 import static dev.sbkit.Util.*;
 
 /**
  * Once per run, when you enter the boss room or the team score passes your limit, open the inventory,
- * put your Spring Boots on and close it again, all in one tick. Settings are per dungeon class.
+ * put your Spring Boots on and close it again. Settings are per dungeon class.
+ * Timing follows NoammAddons' AutoI4: a trigger starts a tick countdown, then the steps run from a queue,
+ * one per step gap, while your mouse and keys are locked. (Client ticks, not Hypixel server ticks.)
  */
 public final class AutoSpringBoots extends Feature {
     private static final int FEET = 8; // armor slot in the player's own menu
     private static final int WAIT_TICKS = 100; // how long to wait for another screen (chest, menu) to close
 
     private final Setting.Choice editing = add(new Setting.Choice("editing", "Editing for", Dungeon.CLASSES.get(0), Dungeon.CLASSES));
+    private final Map<String, Setting.Bool> onFor = new HashMap<>();
     private final Map<String, Setting.Bool> onBoss = new HashMap<>();
     private final Map<String, Setting.Int> atScore = new HashMap<>();
 
-    private boolean armed, done;
-    private int score = -1, sinceCheck, waited;
+    private final Setting.Int delay = add(new Setting.Int("delay", "Delay after trigger (ticks)", 0, 0, 40, 1));
+    private final Setting.Int gap = add(new Setting.Int("gap", "Pause between steps (ticks, 0 = one tick)", 0, 0, 5, 1));
+
+    private final Queue<Runnable> steps = new ArrayDeque<>();
+    private boolean armed, done, scoreFailed;
+    private String why = "";
+    private int score = -1, sinceCheck, waited, countdown, pause;
 
     public AutoSpringBoots() {
         super("springboots", "Auto Spring Boots", true);
         for (String cls : Dungeon.CLASSES) {
+            var classOn = add(new Setting.Bool(cls + ".on", "On for this class", true));
             var boss = add(new Setting.Bool(cls + ".boss", "Swap on boss entry", true));
             var limit = add(new Setting.Int(cls + ".score", "Swap above score (0 = off)", 290, 0, 317, 1));
+            classOn.visible = () -> editing.get().equals(cls);
             boss.visible = () -> editing.get().equals(cls);
             limit.visible = () -> editing.get().equals(cls);
+            onFor.put(cls, classOn);
             onBoss.put(cls, boss);
             atScore.put(cls, limit);
         }
@@ -47,11 +63,12 @@ public final class AutoSpringBoots extends Feature {
     }
 
     @Override
-    public void onWorldChange(Minecraft mc) { armed = done = false; score = -1; }
+    public void onWorldChange(Minecraft mc) { armed = done = scoreFailed = false; score = -1; steps.clear(); }
 
     @Override
     public void onMessage(Minecraft mc, String text) {
-        if (text.startsWith("[BOSS] ") && onBoss.get(settingsClass(mc)).get()) trigger("boss entry");
+        // The Watcher also talks as [BOSS] in the blood room; only the floor boss (Maxor on F7) counts as entry.
+        if (text.startsWith("[BOSS] ") && !text.startsWith("[BOSS] The Watcher:") && onBoss.get(settingsClass(mc)).get()) trigger("boss entry");
     }
 
     /** Runs before the game reads your keys this tick. */
@@ -59,22 +76,34 @@ public final class AutoSpringBoots extends Feature {
     public void onStartTick(Minecraft mc) {
         if (mc.player == null || mc.gameMode == null) return;
         if (++sinceCheck >= 10) { sinceCheck = 0; score = dungeonScore(mc); }
+        runSteps();
         if (!on()) return;
         int limit = atScore.get(settingsClass(mc)).get();
-        if (limit > 0 && score > limit) trigger("score " + score);
-        if (armed) swap(mc);
+        if (limit > 0 && score > limit && !scoreFailed) trigger("score " + score);
+        if (armed && --countdown < 0) swap(mc);
     }
 
-    private void trigger(String why) {
-        if (!on() || done || armed) return;
+    /** One queued step per tick, with {@code gap} idle ticks between steps; gap 0 runs the whole queue at once. */
+    private void runSteps() {
+        while (!steps.isEmpty()) {
+            if (pause > 0) { pause--; return; }
+            steps.poll().run();
+            pause = gap.get();
+        }
+    }
+
+    private void trigger(String reason) {
+        if (!on() || done || armed || !onFor.get(settingsClass(Minecraft.getInstance())).get()) return;
         armed = true;
         waited = 0;
-        debug("triggered by " + why);
+        countdown = delay.get();
+        why = reason;
+        debug("triggered by " + reason);
     }
 
     private void swap(Minecraft mc) {
         if (mc.gui.screen() != null) { // a chest or menu is open: wait for it, then go
-            if (++waited > WAIT_TICKS) { armed = false; warn("another screen stayed open, boots not swapped"); }
+            if (++waited > WAIT_TICKS) { armed = false; fail("another screen stayed open"); }
             return;
         }
         armed = false;
@@ -88,14 +117,32 @@ public final class AutoSpringBoots extends Feature {
         for (int i = 0; i < 36 && from < 0; i++) {
             if (isSpringBoots(mc.player.getInventory().getItem(i))) from = i < 9 ? 36 + i : i;
         }
-        if (from < 0) { warn("no Spring Boots in your inventory"); return; }
+        if (from < 0) { fail("no Spring Boots in your inventory"); return; }
 
-        mc.gui.setScreen(new InventoryScreen(mc.player)); // opening it releases every held key, like doing it by hand
-        click(mc, from);
-        click(mc, FEET);
-        if (!worn.isEmpty()) click(mc, from); // the old boots are on the cursor: put them where the new ones were
-        mc.player.closeContainer();
-        debug("swapped to " + name(menu.slots.get(FEET).getItem()));
+        final int src = from;
+        // Opening the screen releases every held key; Locked swallows clicks and keys until the last step closes it.
+        steps.add(() -> mc.gui.setScreen(new Locked(mc.player)));
+        steps.add(() -> click(mc, src));
+        steps.add(() -> click(mc, FEET));
+        if (!worn.isEmpty()) steps.add(() -> click(mc, src)); // the old boots are on the cursor: put them where the new ones were
+        steps.add(() -> {
+            mc.player.closeContainer();
+            debug("swapped to " + name(menu.slots.get(FEET).getItem()));
+        });
+        pause = 0;
+    }
+
+    /** The inventory screen with player input switched off. */
+    private static final class Locked extends InventoryScreen {
+        Locked(Player p) { super(p); }
+        @Override public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) { return true; }
+        @Override public boolean keyPressed(KeyEvent e) { return true; }
+    }
+
+    /** Tell the player what fired and why it failed. A failed score trigger must not use up the boss-entry swap. */
+    private void fail(String reason) {
+        warn("boots not swapped (" + why + "): " + reason);
+        if (why.startsWith("score")) { scoreFailed = true; done = false; }
     }
 
     private void click(Minecraft mc, int slot) {
