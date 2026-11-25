@@ -29,6 +29,7 @@ public final class AutoSpringBoots extends Feature {
     private static final int WAIT_TICKS = 100; // how long to wait for another screen (chest, menu) to close
 
     private final Setting.Choice editing = add(new Setting.Choice("editing", "Editing for", Dungeon.CLASSES.get(0), Dungeon.CLASSES));
+    private final Map<String, Setting.Bool> onFor = new HashMap<>();
     private final Map<String, Setting.Bool> onBoss = new HashMap<>();
     private final Map<String, Setting.Int> atScore = new HashMap<>();
 
@@ -42,10 +43,13 @@ public final class AutoSpringBoots extends Feature {
     public AutoSpringBoots() {
         super("springboots", "Auto Spring Boots", true);
         for (String cls : Dungeon.CLASSES) {
+            var classOn = add(new Setting.Bool(cls + ".on", "On for this class", true));
             var boss = add(new Setting.Bool(cls + ".boss", "Swap on boss entry", true));
             var limit = add(new Setting.Int(cls + ".score", "Swap above score (0 = off)", 290, 0, 317, 1));
+            classOn.visible = () -> editing.get().equals(cls);
             boss.visible = () -> editing.get().equals(cls);
             limit.visible = () -> editing.get().equals(cls);
+            onFor.put(cls, classOn);
             onBoss.put(cls, boss);
             atScore.put(cls, limit);
         }
@@ -87,7 +91,7 @@ public final class AutoSpringBoots extends Feature {
     }
 
     private void trigger(String why) {
-        if (!on() || done || armed) return;
+        if (!on() || done || armed || !onFor.get(settingsClass(Minecraft.getInstance())).get()) return;
         armed = true;
         waited = 0;
         countdown = delay.get();
