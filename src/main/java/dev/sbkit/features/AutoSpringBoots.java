@@ -37,7 +37,8 @@ public final class AutoSpringBoots extends Feature {
     private final Setting.Int gap = add(new Setting.Int("gap", "Pause between steps (ticks, 0 = one tick)", 0, 0, 5, 1));
 
     private final Queue<Runnable> steps = new ArrayDeque<>();
-    private boolean armed, done;
+    private boolean armed, done, scoreFailed;
+    private String why = "";
     private int score = -1, sinceCheck, waited, countdown, pause;
 
     public AutoSpringBoots() {
@@ -62,7 +63,7 @@ public final class AutoSpringBoots extends Feature {
     }
 
     @Override
-    public void onWorldChange(Minecraft mc) { armed = done = false; score = -1; steps.clear(); }
+    public void onWorldChange(Minecraft mc) { armed = done = scoreFailed = false; score = -1; steps.clear(); }
 
     @Override
     public void onMessage(Minecraft mc, String text) {
@@ -78,7 +79,7 @@ public final class AutoSpringBoots extends Feature {
         runSteps();
         if (!on()) return;
         int limit = atScore.get(settingsClass(mc)).get();
-        if (limit > 0 && score > limit) trigger("score " + score);
+        if (limit > 0 && score > limit && !scoreFailed) trigger("score " + score);
         if (armed && --countdown < 0) swap(mc);
     }
 
@@ -91,17 +92,18 @@ public final class AutoSpringBoots extends Feature {
         }
     }
 
-    private void trigger(String why) {
+    private void trigger(String reason) {
         if (!on() || done || armed || !onFor.get(settingsClass(Minecraft.getInstance())).get()) return;
         armed = true;
         waited = 0;
         countdown = delay.get();
-        debug("triggered by " + why);
+        why = reason;
+        debug("triggered by " + reason);
     }
 
     private void swap(Minecraft mc) {
         if (mc.gui.screen() != null) { // a chest or menu is open: wait for it, then go
-            if (++waited > WAIT_TICKS) { armed = false; warn("another screen stayed open, boots not swapped"); }
+            if (++waited > WAIT_TICKS) { armed = false; fail("another screen stayed open"); }
             return;
         }
         armed = false;
@@ -115,7 +117,7 @@ public final class AutoSpringBoots extends Feature {
         for (int i = 0; i < 36 && from < 0; i++) {
             if (isSpringBoots(mc.player.getInventory().getItem(i))) from = i < 9 ? 36 + i : i;
         }
-        if (from < 0) { warn("no Spring Boots in your inventory"); return; }
+        if (from < 0) { fail("no Spring Boots in your inventory"); return; }
 
         final int src = from;
         // Opening the screen releases every held key; Locked swallows clicks and keys until the last step closes it.
@@ -135,6 +137,12 @@ public final class AutoSpringBoots extends Feature {
         Locked(Player p) { super(p); }
         @Override public boolean mouseClicked(MouseButtonEvent e, boolean doubleClick) { return true; }
         @Override public boolean keyPressed(KeyEvent e) { return true; }
+    }
+
+    /** Tell the player what fired and why it failed. A failed score trigger must not use up the boss-entry swap. */
+    private void fail(String reason) {
+        warn("boots not swapped (" + why + "): " + reason);
+        if (why.startsWith("score")) { scoreFailed = true; done = false; }
     }
 
     private void click(Minecraft mc, int slot) {
