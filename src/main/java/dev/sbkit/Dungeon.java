@@ -1,6 +1,7 @@
 package dev.sbkit;
 
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -23,5 +24,24 @@ public final class Dungeon {
     public static int score(String line) {
         Matcher m = SCORE.matcher(line);
         return m.find() ? Integer.parseInt(m.group(1)) : -1;
+    }
+
+    public record Pick(int step, String cls) {}
+
+    /**
+     * The leap order is "Mage, Healer/Tank, Mage": steps split by commas, alternatives by slashes.
+     * Returns the first step at or after {@code from} that has a class in {@code present}, with the first such class
+     * of that step (alternatives are in order of preference). A step nobody can fill is skipped. Null when none is left.
+     */
+    public static Pick pick(String order, int from, Set<String> present) {
+        String[] steps = order.split(",");
+        for (int i = Math.max(0, from); i < steps.length; i++) {
+            for (String alt : steps[i].split("/")) {
+                for (String c : CLASSES) {
+                    if (c.equalsIgnoreCase(alt.trim()) && present.contains(c)) return new Pick(i, c);
+                }
+            }
+        }
+        return null;
     }
 }
