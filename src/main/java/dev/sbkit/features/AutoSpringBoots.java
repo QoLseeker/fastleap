@@ -66,7 +66,8 @@ public final class AutoSpringBoots extends Feature {
 
     @Override
     public void onMessage(Minecraft mc, String text) {
-        if (text.startsWith("[BOSS] ") && onBoss.get(settingsClass(mc)).get()) trigger("boss entry");
+        // The Watcher also talks as [BOSS] in the blood room; only the floor boss (Maxor on F7) counts as entry.
+        if (text.startsWith("[BOSS] ") && !text.startsWith("[BOSS] The Watcher:") && onBoss.get(settingsClass(mc)).get()) trigger("boss entry");
     }
 
     /** Runs before the game reads your keys this tick. */
