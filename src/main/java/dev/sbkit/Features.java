@@ -1,7 +1,7 @@
 package dev.sbkit;
 
 import dev.sbkit.features.FastLeap;
-import dev.sbkit.features.RagPetSwap;
+import dev.sbkit.features.AutoSpringBoots;
 
 import java.util.List;
 
@@ -9,7 +9,7 @@ import java.util.List;
 public final class Features {
     public static final List<Feature> ALL = List.of(
         new FastLeap(),
-        new RagPetSwap()
+        new AutoSpringBoots()
     );
 
     private Features() {}

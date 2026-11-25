@@ -1,10 +1,10 @@
 package dev.sbkit.features;
 
+import dev.sbkit.Dungeon;
 import dev.sbkit.Feature;
 import dev.sbkit.Setting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
-import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.item.Items;
@@ -23,26 +23,25 @@ import static dev.sbkit.Util.*;
  */
 public final class FastLeap extends Feature {
     private enum Stage {
-        BLOOD_RUSH("Blood Rush"), MAXOR("Maxor"), LATER("later phases");
+        BLOOD_RUSH("Blood Rush"), MAXOR("Maxor"), STORM("Storm"), LATER("after Storm");
         final String label;
         Stage(String label) { this.label = label; }
     }
 
-    private static final List<String> CLASSES = List.of("Archer", "Berserk", "Healer", "Mage", "Tank");
+    private static final List<String> CLASSES = Dungeon.CLASSES;
     private static final List<String> OPTIONS = List.of("Archer", "Berserk", "Healer", "Mage", "Tank", "Off");
-    private static final String BLOOD_RUSH = "BLOOD_RUSH", CRYSTAL = "CRYSTAL";
+    private static final String BLOOD_RUSH = "BLOOD_RUSH", CRYSTAL = "CRYSTAL", AFTER_STORM = "AFTER_STORM";
     private static final long NONE = Long.MIN_VALUE;
     private static final int WAIT_TICKS = 40;
 
-    private static final Pattern TAB = Pattern.compile("(\\w{1,16})[^\\w(]*\\((Archer|Berserk|Healer|Mage|Tank)\\b");
     private static final Pattern PICKUP = Pattern.compile("(\\w+) picked up an Energy Crystal");
-    private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Storm|Goldor|Necron|Wither King):");
+    private static final Pattern LATER = Pattern.compile("^\\[BOSS] (Goldor|Necron|Wither King):");
     private static final Pattern HEAD_NAME = Pattern.compile("(?:\\[.+?] )?(\\w{1,16})");
 
     private final Setting.Bool crystalLeap = add(new Setting.Bool("crystalLeap", "Crystal auto-leap", false));
     private final Setting.Int clickDelayMs = add(new Setting.Int("clickDelayMs", "Click delay (ms)", 150, 50, 3000, 50));
     private final Setting.Int cooldownMs = add(new Setting.Int("cooldownMs", "Cooldown (ms)", 500, 0, 3000, 50));
-    private final Setting.Choice editing = add(new Setting.Choice("editing", "Editing targets for", CLASSES.get(0), CLASSES));
+    private final Setting.Choice editing = add(new Setting.Choice("editing", "Editing for", CLASSES.get(0), CLASSES));
     /** "<class>.<stage key>" -> class to leap to, or Off. */
     private final Map<String, Setting.Choice> targets = new HashMap<>();
 
@@ -55,12 +54,21 @@ public final class FastLeap extends Feature {
     public FastLeap() {
         super("fastleap", "Fast Leap", true);
         for (String cls : CLASSES) {
-            for (String[] st : new String[][] {{BLOOD_RUSH, "Blood Rush click"}, {CRYSTAL, "Crystal pickup"}}) {
-                Setting.Choice c = add(new Setting.Choice(cls + "." + st[0], cls + ": " + st[1], CLASSES.get(0), OPTIONS));
+            for (String[] st : new String[][] {{BLOOD_RUSH, "Blood Rush click"}, {CRYSTAL, "Crystal pickup"}, {AFTER_STORM, "After Storm click"}}) {
+                // After Storm starts Off so the left click keeps swinging until you pick a class.
+                Setting.Choice c = add(new Setting.Choice(cls + "." + st[0], st[1], st[0].equals(AFTER_STORM) ? "Off" : CLASSES.get(0), OPTIONS));
+                Stage live = st[0].equals(BLOOD_RUSH) ? Stage.BLOOD_RUSH : st[0].equals(CRYSTAL) ? Stage.MAXOR : Stage.LATER;
                 c.visible = () -> editing.get().equals(cls);
+                c.highlight = () -> stage == live; // accent bar on the row for the current stage
                 targets.put(cls + "." + st[0], c);
             }
         }
+    }
+
+    @Override
+    public String status() {
+        String cls = myClass(Minecraft.getInstance());
+        return (cls == null ? "?" : cls) + " · " + stage.label;
     }
 
     @Override
@@ -73,7 +81,7 @@ public final class FastLeap extends Feature {
 
     @Override
     public void onMessage(Minecraft mc, String text) {
-        Stage s = text.startsWith("[BOSS] Maxor:") ? Stage.MAXOR : LATER.matcher(text).find() ? Stage.LATER : null;
+        Stage s = text.startsWith("[BOSS] Maxor:") ? Stage.MAXOR : text.startsWith("[BOSS] Storm:") ? Stage.STORM : LATER.matcher(text).find() ? Stage.LATER : null;
         if (s != null && s.ordinal() > stage.ordinal()) {
             stage = s;
             debug("stage is now " + s.label);
@@ -84,7 +92,8 @@ public final class FastLeap extends Feature {
     @Override
     public void onStartTick(Minecraft mc) {
         boolean down = mc.options.keyAttack.isDown();
-        String t = down && !wasDown && stage == Stage.BLOOD_RUSH ? leapTarget(mc, BLOOD_RUSH) : null;
+        String key = stage == Stage.BLOOD_RUSH ? BLOOD_RUSH : stage == Stage.LATER ? AFTER_STORM : null;
+        String t = down && !wasDown && key != null ? leapTarget(mc, key) : null;
         if (t != null) {
             startLeap(mc, t);
             while (mc.options.keyAttack.consumeClick()) { } // swallow the click so the leap item isn't also swung
@@ -225,21 +234,5 @@ public final class FastLeap extends Feature {
     private String leapTarget(Minecraft mc, String stageKey) {
         if (mc.player == null || mc.gui.screen() != null || !isLeapItem(heldName(mc))) return null;
         return target(mc, stageKey);
-    }
-
-    private static String myClass(Minecraft mc) {
-        return mc.player == null ? null : teammateClasses(mc).get(mc.player.getName().getString());
-    }
-
-    /** Player name -> dungeon class, read from the tab list. */
-    private static Map<String, String> teammateClasses(Minecraft mc) {
-        Map<String, String> out = new HashMap<>();
-        if (mc.getConnection() == null) return out;
-        for (PlayerInfo info : mc.getConnection().getOnlinePlayers()) {
-            if (info.getTabListDisplayName() == null) continue;
-            Matcher m = TAB.matcher(info.getTabListDisplayName().getString());
-            if (m.find()) out.put(m.group(1), m.group(2));
-        }
-        return out;
     }
 }

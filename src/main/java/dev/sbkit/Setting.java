@@ -11,6 +11,8 @@ public abstract class Setting<T> {
     public final String key, label;
     /** Hide the row (e.g. when another setting selects a different group). */
     public BooleanSupplier visible = () -> true;
+    /** Optional accent bar on the row while this returns true. */
+    public BooleanSupplier highlight;
     private T value;
 
     private Setting(String key, String label, T def) { this.key = key; this.label = label; this.value = def; }
@@ -30,6 +32,12 @@ public abstract class Setting<T> {
         public final int min, max, step;
         public Int(String key, String label, int def, int min, int max, int step) {
             super(key, label, def); this.min = min; this.max = max; this.step = step;
+        }
+        /** Slider position 0..1 to a value. Squared curve (fine control at the low end), snapped to step. Same as fastleap 1.0.0. */
+        public int fromFraction(double t) {
+            t = Math.max(0, Math.min(1, t));
+            int v = (int) Math.round((min + (max - min) * t * t) / step) * step;
+            return Math.max(min, Math.min(max, v));
         }
         @Override public void set(Integer v) { super.set(Math.max(min, Math.min(max, v))); }
         JsonElement toJson() { return new JsonPrimitive(get()); }

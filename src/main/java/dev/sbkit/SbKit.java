@@ -37,17 +37,13 @@ public final class SbKit implements ClientModInitializer {
             each(f -> f.onMessage(mc, text));
         });
 
-        // /sbkit opens the feature list; /<featureId> (e.g. /fastleap) opens that feature's page.
-        ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) -> {
-            dispatcher.register(ClientCommands.literal("sbkit").executes(c -> open(null)));
-            for (Feature f : Features.ALL) dispatcher.register(ClientCommands.literal(f.id).executes(c -> open(f)));
-        });
-    }
-
-    private static int open(Feature f) {
-        Minecraft mc = Minecraft.getInstance();
-        mc.execute(() -> mc.gui.setScreen(new SettingsScreen(f, 0)));
-        return 1;
+        // /sbkit is the only way in; everything else lives in that one screen.
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, buildContext) ->
+            dispatcher.register(ClientCommands.literal("sbkit").executes(c -> {
+                Minecraft mc = Minecraft.getInstance();
+                mc.execute(() -> mc.gui.setScreen(new SettingsScreen()));
+                return 1;
+            })));
     }
 
     private static void endTick(Minecraft mc) {
@@ -55,7 +51,7 @@ public final class SbKit implements ClientModInitializer {
             lastLevel = mc.level;
             each(f -> f.onWorldChange(mc));
         }
-        while (menuKey.consumeClick()) mc.gui.setScreen(new SettingsScreen(null, 0));
+        while (menuKey.consumeClick()) mc.gui.setScreen(new SettingsScreen());
         each(f -> f.onTick(mc));
     }
 

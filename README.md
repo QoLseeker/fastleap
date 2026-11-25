@@ -8,7 +8,7 @@ Small client mod where every feature is one class.
 3. Override only the hooks you need: `init`, `onStartTick`, `onTick`, `onMessage`, `onWorldChange`.
 4. Add `new MyFeature()` to `Features.ALL`. Nothing else changes.
 
-Open settings: `/sbkit`, `/<featureId>` (`/fastleap`, `/ragswap`), or the "Open SB Kit settings" keybind.
+Open settings with `/sbkit`: one bar per feature. Left click toggles it, right click expands its settings.
 
 ## Build
 Needs JDK 25 and Gradle 9.5+: `gradle build` -> `build/libs/sbkit-1.0.0.jar`. Remove the old `fastleap-1.0.0.jar` from your mods folder.
