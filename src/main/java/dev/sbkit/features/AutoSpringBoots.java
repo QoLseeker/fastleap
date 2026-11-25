@@ -66,10 +66,14 @@ public final class AutoSpringBoots extends Feature {
     public void onWorldChange(Minecraft mc) { armed = done = scoreFailed = false; score = -1; steps.clear(); }
 
     @Override
-    public void onMessage(Minecraft mc, String text) {
-        // The Watcher also talks as [BOSS] in the blood room; only the floor boss (Maxor on F7) counts as entry.
-        if (text.startsWith("[BOSS] ") && !text.startsWith("[BOSS] The Watcher:") && onBoss.get(settingsClass(mc)).get()) trigger("boss entry");
+public void onMessage(Minecraft mc, String text) {
+    if (text.startsWith("[BOSS] ")
+            && !text.startsWith("[BOSS] The Watcher:")
+            && !text.startsWith("[BOSS] Scarf:")
+            && onBoss.get(settingsClass(mc)).get()) {
+        trigger("boss entry");
     }
+}
 
     /** Runs before the game reads your keys this tick. */
     @Override
